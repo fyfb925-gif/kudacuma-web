@@ -3,3 +3,6 @@ pandas
 qrcode
 Pillow
 html2image
+
+gspread
+google-auth

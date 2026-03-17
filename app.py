@@ -102,22 +102,58 @@ def save_history_to_csv(df: pd.DataFrame):
     safe_df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
 
 
-def load_history():
+import gspread
+from google.oauth2.service_account import Credentials
+
+@st.cache_resource
+def get_gsheet():
     try:
-        return load_history_from_gsheet()
+        scope = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],
+            scopes=scope
+        )
+        client = gspread.authorize(creds)
+
+        sheet = client.open("kudacuma_db").sheet1
+        return sheet
     except Exception as e:
-        st.warning(f"Google Sheets 读取失败，已回退本地 CSV：{e}")
-        return load_history_from_csv()
+        st.warning("⚠️ Google Sheets连接失败，使用本地CSV")
+        return None
+
+
+def load_history():
+    sheet = get_gsheet()
+
+    if sheet:
+        try:
+            data = sheet.get_all_records()
+            return pd.DataFrame(data)
+        except:
+            pass
+
+    # fallback
+    try:
+        return pd.read_csv(DB_FILE, encoding="utf-8-sig")
+    except:
+        return pd.DataFrame(columns=BASE_COLUMNS)
 
 
 def save_history(df: pd.DataFrame):
-    try:
-        save_history_to_gsheet(df)
-        # 同步备份到本地 CSV
-        save_history_to_csv(df)
-    except Exception as e:
-        st.error(f"Google Sheets 保存失败，已回退本地 CSV：{e}")
-        save_history_to_csv(df)
+    sheet = get_gsheet()
+
+    if sheet:
+        try:
+            sheet.clear()
+            sheet.update([df.columns.values.tolist()] + df.values.tolist())
+            return
+        except:
+            st.warning("⚠️ 写入Google失败，改存本地")
+
+    df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
 
 
 def prepare_history_for_analysis(df):

@@ -6,3 +6,6 @@ html2image
 
 gspread
 google-auth
+
+gspread
+google-auth

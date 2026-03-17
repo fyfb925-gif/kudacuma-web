@@ -1,3 +1,19 @@
+st.write("TEST START")
+
+try:
+    test_client = get_gsheet_client()
+    st.success("✅ client OK")
+
+    ss = test_client.open_by_key("1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho")
+    st.success("✅ spreadsheet OK")
+
+    ws = ss.worksheet("history")
+    st.success("✅ worksheet OK")
+
+except Exception as e:
+    st.error(f"❌ 具体错误：{e}")
+
+
 import streamlit as st
 import pandas as pd
 import datetime

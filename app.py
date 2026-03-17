@@ -5,13 +5,20 @@ import os
 import html
 from pathlib import Path
 
+import gspread
+from google.oauth2.service_account import Credentials
 from html2image import Html2Image
 
 # --- 1. 基础配置 ---
 st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V11.8", layout="wide")
+
 DB_FILE = "kudacuma_history.csv"
 QR_DIR = "qr_codes"
 EXPORT_DIR = "exports"
+
+# Google Sheets 配置
+SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"
+HISTORY_WORKSHEET = "history"
 
 BASE_COLUMNS = [
     "日期", "客户", "单号", "状态", "运费状态", "总收入", "总利润", "利润率"
@@ -29,12 +36,27 @@ if not os.path.exists(DB_FILE):
     )
 
 
-def load_history():
-    try:
-        df = pd.read_csv(DB_FILE, encoding="utf-8-sig")
-    except Exception:
-        df = pd.DataFrame(columns=BASE_COLUMNS)
+# --- Google Sheets 工具函数 ---
+def get_gsheet_client():
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=scope
+    )
+    return gspread.authorize(creds)
 
+
+def get_history_worksheet():
+    client = get_gsheet_client()
+    sheet = client.open_by_key(SHEET_ID)
+    return sheet.worksheet(HISTORY_WORKSHEET)
+
+
+def ensure_history_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
     for col in BASE_COLUMNS:
         if col not in df.columns:
             if col == "状态":
@@ -43,17 +65,59 @@ def load_history():
                 df[col] = "已确认"
             else:
                 df[col] = ""
-
     return df[BASE_COLUMNS].copy()
 
 
+def load_history_from_gsheet():
+    ws = get_history_worksheet()
+    records = ws.get_all_records()
+    if not records:
+        return pd.DataFrame(columns=BASE_COLUMNS)
+    df = pd.DataFrame(records)
+    return ensure_history_columns(df)
+
+
+def save_history_to_gsheet(df: pd.DataFrame):
+    ws = get_history_worksheet()
+    safe_df = ensure_history_columns(df).fillna("").copy()
+
+    # Google Sheets 需要纯文本/数字，不要 Timestamp 对象
+    if "日期" in safe_df.columns:
+        safe_df["日期"] = safe_df["日期"].astype(str)
+
+    ws.clear()
+    ws.update([safe_df.columns.tolist()] + safe_df.values.tolist())
+
+
+def load_history_from_csv():
+    try:
+        df = pd.read_csv(DB_FILE, encoding="utf-8-sig")
+    except Exception:
+        df = pd.DataFrame(columns=BASE_COLUMNS)
+    return ensure_history_columns(df)
+
+
+def save_history_to_csv(df: pd.DataFrame):
+    safe_df = ensure_history_columns(df)
+    safe_df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
+
+
+def load_history():
+    try:
+        return load_history_from_gsheet()
+    except Exception as e:
+        st.warning(f"Google Sheets 读取失败，已回退本地 CSV：{e}")
+        return load_history_from_csv()
+
+
 def save_history(df: pd.DataFrame):
-    df = df.copy()
-    for col in BASE_COLUMNS:
-        if col not in df.columns:
-            df[col] = ""
-    df = df[BASE_COLUMNS]
-    df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
+    try:
+        save_history_to_gsheet(df)
+        # 同步备份到本地 CSV
+        save_history_to_csv(df)
+    except Exception as e:
+        st.error(f"Google Sheets 保存失败，已回退本地 CSV：{e}")
+        save_history_to_csv(df)
 
 
 def prepare_history_for_analysis(df):
@@ -78,6 +142,8 @@ def prepare_history_for_analysis(df):
 
 def format_jpy(v):
     return f"¥ {int(v):,}"
+
+
 def _build_item_cards_html(valid_df: pd.DataFrame) -> str:
     if valid_df.empty:
         return "<div style='color:#bbb; padding:12px 0; font-size:0.92rem;'>等待录入...</div>"
@@ -1228,6 +1294,7 @@ if menu == "新建报价":
                 history = pd.concat([history, new_row], ignore_index=True)
                 save_history(history)
                 st.success("已保存为成交")
+
     with s3:
         if st.button("🖼️ 导出报价图片", use_container_width=True):
             qr_p = os.path.join(QR_DIR, f"{pay_method}.png")

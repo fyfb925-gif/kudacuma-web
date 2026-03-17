@@ -79,16 +79,18 @@ def load_history():
         values = ws.get_all_values()
 
         if not values:
+            st.info("ℹ️ Google Sheets 当前为空")
             return pd.DataFrame(columns=BASE_COLUMNS)
 
         headers = values[0]
         rows = values[1:] if len(values) > 1 else []
         df = pd.DataFrame(rows, columns=headers)
 
+        st.success("✅ 已从 Google Sheets 读取历史订单")
         return ensure_history_columns(df)
 
     except Exception as e:
-        st.warning(f"Google Sheets 读取失败，使用本地CSV：{e}")
+        st.warning(f"⚠️ Google Sheets 读取失败，使用本地CSV：{e}")
         try:
             df = pd.read_csv(DB_FILE, encoding="utf-8-sig")
         except Exception:
@@ -102,8 +104,6 @@ def save_history(df: pd.DataFrame):
         ws = get_history_worksheet()
 
         save_df = df.fillna("").copy()
-
-        # 全部转成字符串，避免 Google Sheets 对日期/数字解析报错
         for col in save_df.columns:
             save_df[col] = save_df[col].astype(str)
 
@@ -112,11 +112,13 @@ def save_history(df: pd.DataFrame):
         ws.clear()
         ws.update("A1", values)
 
+        st.success("✅ 已成功写入 Google Sheets")
+
         # 同步备份本地 CSV
         df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
 
     except Exception as e:
-        st.error(f"Google Sheets 保存失败，已回退本地 CSV：{e}")
+        st.error(f"❌ Google Sheets 保存失败，已回退本地 CSV：{e}")
         df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
 
 

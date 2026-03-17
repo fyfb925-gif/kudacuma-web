@@ -37,23 +37,29 @@ if not os.path.exists(DB_FILE):
 
 
 # --- Google Sheets 工具函数 ---
+import gspread
+from google.oauth2.service_account import Credentials
+
+SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"
+HISTORY_WORKSHEET = "history"
+
+@st.cache_resource
 def get_gsheet_client():
     scope = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
     creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
+        dict(st.secrets["gcp_service_account"]),
         scopes=scope
     )
     return gspread.authorize(creds)
 
-
 def get_history_worksheet():
     client = get_gsheet_client()
-    sheet = client.open_by_key(SHEET_ID)
-    return sheet.worksheet(HISTORY_WORKSHEET)
-
+    spreadsheet = client.open_by_key(SHEET_ID)
+    worksheet = spreadsheet.worksheet(HISTORY_WORKSHEET)
+    return worksheet
 
 def ensure_history_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -67,26 +73,51 @@ def ensure_history_columns(df: pd.DataFrame) -> pd.DataFrame:
                 df[col] = ""
     return df[BASE_COLUMNS].copy()
 
+def load_history():
+    try:
+        ws = get_history_worksheet()
+        values = ws.get_all_values()
 
-def load_history_from_gsheet():
-    ws = get_history_worksheet()
-    records = ws.get_all_records()
-    if not records:
-        return pd.DataFrame(columns=BASE_COLUMNS)
-    df = pd.DataFrame(records)
-    return ensure_history_columns(df)
+        if not values:
+            return pd.DataFrame(columns=BASE_COLUMNS)
 
+        headers = values[0]
+        rows = values[1:] if len(values) > 1 else []
+        df = pd.DataFrame(rows, columns=headers)
 
-def save_history_to_gsheet(df: pd.DataFrame):
-    ws = get_history_worksheet()
-    safe_df = ensure_history_columns(df).fillna("").copy()
+        return ensure_history_columns(df)
 
-    # Google Sheets 需要纯文本/数字，不要 Timestamp 对象
-    if "日期" in safe_df.columns:
-        safe_df["日期"] = safe_df["日期"].astype(str)
+    except Exception as e:
+        st.warning(f"Google Sheets 读取失败，使用本地CSV：{e}")
+        try:
+            df = pd.read_csv(DB_FILE, encoding="utf-8-sig")
+        except Exception:
+            df = pd.DataFrame(columns=BASE_COLUMNS)
+        return ensure_history_columns(df)
 
-    ws.clear()
-    ws.update([safe_df.columns.tolist()] + safe_df.values.tolist())
+def save_history(df: pd.DataFrame):
+    df = ensure_history_columns(df)
+
+    try:
+        ws = get_history_worksheet()
+
+        save_df = df.fillna("").copy()
+
+        # 全部转成字符串，避免 Google Sheets 对日期/数字解析报错
+        for col in save_df.columns:
+            save_df[col] = save_df[col].astype(str)
+
+        values = [save_df.columns.tolist()] + save_df.values.tolist()
+
+        ws.clear()
+        ws.update("A1", values)
+
+        # 同步备份本地 CSV
+        df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
+
+    except Exception as e:
+        st.error(f"Google Sheets 保存失败，已回退本地 CSV：{e}")
+        df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
 
 
 def load_history_from_csv():
@@ -121,7 +152,7 @@ def get_gsheet():
         sheet = client.open("kudacuma_db").sheet1
         return sheet
     except Exception as e:
-        st.warning("⚠️ Google Sheets连接失败，使用本地CSV")
+       
         return None
 
 
@@ -953,22 +984,6 @@ div[data-testid="stDataEditor"] textarea {
 }
 </style>
 """, unsafe_allow_html=True)
-
-st.write("TEST START")
-
-try:
-    test_client = get_gsheet_client()
-    st.success("✅ client OK")
-
-    ss = test_client.open_by_key("1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho")
-    st.success("✅ spreadsheet OK")
-
-    ws = ss.worksheet("history")
-    st.success("✅ worksheet OK")
-
-except Exception as e:
-    st.error(f"❌ 具体错误：{e}")
-
 
 # --- 3. 菜单 ---
 with st.sidebar:

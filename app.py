@@ -37,12 +37,6 @@ if not os.path.exists(DB_FILE):
 
 
 # --- Google Sheets 工具函数 ---
-import gspread
-from google.oauth2.service_account import Credentials
-
-SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"
-HISTORY_WORKSHEET = "history"
-
 @st.cache_resource
 def get_gsheet_client():
     scope = [
@@ -133,61 +127,6 @@ def load_history_from_csv():
 def save_history_to_csv(df: pd.DataFrame):
     safe_df = ensure_history_columns(df)
     safe_df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
-
-
-import gspread
-from google.oauth2.service_account import Credentials
-
-@st.cache_resource
-def get_gsheet():
-    try:
-        scope = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        creds = Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"],
-            scopes=scope
-        )
-        client = gspread.authorize(creds)
-
-        sheet = client.open("kudacuma_db").sheet1
-        return sheet
-    except Exception as e:
-       
-        return None
-
-
-def load_history():
-    sheet = get_gsheet()
-
-    if sheet:
-        try:
-            data = sheet.get_all_records()
-            return pd.DataFrame(data)
-        except:
-            pass
-
-    # fallback
-    try:
-        return pd.read_csv(DB_FILE, encoding="utf-8-sig")
-    except:
-        return pd.DataFrame(columns=BASE_COLUMNS)
-
-
-def save_history(df: pd.DataFrame):
-    sheet = get_gsheet()
-
-    if sheet:
-        try:
-            sheet.clear()
-            sheet.update([df.columns.values.tolist()] + df.values.tolist())
-            return
-        except:
-            st.warning("⚠️ 写入Google失败，改存本地")
-
-    df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
-
 
 def prepare_history_for_analysis(df):
     if df.empty:

@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import os
 import html
+import shutil
 from pathlib import Path
 
 import gspread
@@ -36,6 +37,123 @@ if not os.path.exists(DB_FILE):
     )
 
 
+# =========================
+# 数据清洗 / 格式化工具函数
+# =========================
+def clean_number_series(series: pd.Series) -> pd.Series:
+    """
+    将金额/百分比等混合字符串安全转为数值。
+    可处理:
+    - 12000
+    - "12000"
+    - "¥12,000"
+    - "12,000"
+    - "25%"
+    - ""
+    - None
+    - nan
+    """
+    if series is None:
+        return pd.Series(dtype="float64")
+
+    s = series.astype(str).str.strip()
+    s = s.replace(
+        {
+            "": None,
+            "None": None,
+            "none": None,
+            "nan": None,
+            "NaN": None,
+            "NULL": None,
+            "null": None,
+            "-": None,
+        }
+    )
+
+    s = (
+        s.str.replace("¥", "", regex=False)
+         .str.replace(",", "", regex=False)
+         .str.replace("%", "", regex=False)
+         .str.replace("RMB", "", regex=False)
+         .str.replace("JPY", "", regex=False)
+         .str.strip()
+    )
+
+    return pd.to_numeric(s, errors="coerce")
+
+
+def ensure_history_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    for col in BASE_COLUMNS:
+        if col not in df.columns:
+            if col == "状态":
+                df[col] = "成交"
+            elif col == "运费状态":
+                df[col] = "已确认"
+            else:
+                df[col] = ""
+    return df[BASE_COLUMNS].copy()
+
+
+def normalize_history_df(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    统一清洗历史数据，避免 Google Sheets / CSV / 老版本数据格式不一致导致崩溃。
+    """
+    df = ensure_history_columns(df).copy()
+
+    if df.empty:
+        return df
+
+    df["日期"] = pd.to_datetime(df["日期"], errors="coerce").dt.date
+    df["客户"] = df["客户"].fillna("").astype(str)
+    df["单号"] = df["单号"].fillna("").astype(str)
+    df["状态"] = df["状态"].fillna("报价").astype(str)
+    df["运费状态"] = df["运费状态"].fillna("已确认").astype(str)
+
+    for col in ["总收入", "总利润", "利润率"]:
+        if col in df.columns:
+            df[col] = clean_number_series(df[col]).fillna(0)
+
+    return df
+
+
+def format_jpy(v):
+    try:
+        return f"¥ {int(float(v)):,}"
+    except Exception:
+        return "¥ 0"
+
+
+def safe_format_jpy(v):
+    try:
+        return f"¥{int(float(v)):,}"
+    except Exception:
+        return "¥0"
+
+
+def detect_browser_executable():
+    """
+    为 html2image 自动探测可用浏览器。
+    本地 / Streamlit Cloud / Linux 环境都尽量兼容。
+    """
+    candidates = [
+        os.environ.get("CHROME_BIN"),
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        shutil.which("chromium"),
+        shutil.which("chromium-browser"),
+        shutil.which("google-chrome"),
+        shutil.which("google-chrome-stable"),
+    ]
+
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+    return None
+
+
 # --- Google Sheets 工具函数 ---
 @st.cache_resource
 def get_gsheet_client():
@@ -49,23 +167,13 @@ def get_gsheet_client():
     )
     return gspread.authorize(creds)
 
+
 def get_history_worksheet():
     client = get_gsheet_client()
     spreadsheet = client.open_by_key(SHEET_ID)
     worksheet = spreadsheet.worksheet(HISTORY_WORKSHEET)
     return worksheet
 
-def ensure_history_columns(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    for col in BASE_COLUMNS:
-        if col not in df.columns:
-            if col == "状态":
-                df[col] = "成交"
-            elif col == "运费状态":
-                df[col] = "已确认"
-            else:
-                df[col] = ""
-    return df[BASE_COLUMNS].copy()
 
 def load_history():
     try:
@@ -81,7 +189,7 @@ def load_history():
         df = pd.DataFrame(rows, columns=headers)
 
         st.success("✅ 已从 Google Sheets 读取历史订单")
-        return ensure_history_columns(df)
+        return normalize_history_df(df)
 
     except Exception as e:
         st.warning(f"⚠️ Google Sheets 读取失败，使用本地CSV：{e}")
@@ -89,15 +197,23 @@ def load_history():
             df = pd.read_csv(DB_FILE, encoding="utf-8-sig")
         except Exception:
             df = pd.DataFrame(columns=BASE_COLUMNS)
-        return ensure_history_columns(df)
+        return normalize_history_df(df)
+
 
 def save_history(df: pd.DataFrame):
-    df = ensure_history_columns(df)
+    df = normalize_history_df(df)
 
     try:
         ws = get_history_worksheet()
 
-        save_df = df.fillna("").copy()
+        save_df = df.copy()
+        save_df["日期"] = save_df["日期"].apply(lambda x: x.isoformat() if pd.notna(x) and x != "" else "")
+
+        for col in ["总收入", "总利润", "利润率"]:
+            if col in save_df.columns:
+                save_df[col] = save_df[col].fillna(0)
+
+        save_df = save_df.fillna("").copy()
         for col in save_df.columns:
             save_df[col] = save_df[col].astype(str)
 
@@ -121,35 +237,33 @@ def load_history_from_csv():
         df = pd.read_csv(DB_FILE, encoding="utf-8-sig")
     except Exception:
         df = pd.DataFrame(columns=BASE_COLUMNS)
-    return ensure_history_columns(df)
+    return normalize_history_df(df)
 
 
 def save_history_to_csv(df: pd.DataFrame):
-    safe_df = ensure_history_columns(df)
+    safe_df = normalize_history_df(df)
     safe_df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
+
 
 def prepare_history_for_analysis(df):
     if df.empty:
         return df
 
-    temp = df.copy()
+    temp = normalize_history_df(df)
+
     temp["日期"] = pd.to_datetime(temp["日期"], errors="coerce")
     temp["客户"] = temp["客户"].fillna("未知客户").astype(str)
     temp["单号"] = temp["单号"].fillna("").astype(str)
     temp["状态"] = temp["状态"].fillna("报价").astype(str)
     temp["运费状态"] = temp["运费状态"].fillna("已确认").astype(str)
-    temp["总收入"] = pd.to_numeric(temp["总收入"], errors="coerce").fillna(0)
-    temp["总利润"] = pd.to_numeric(temp["总利润"], errors="coerce").fillna(0)
-    temp["利润率"] = pd.to_numeric(temp["利润率"], errors="coerce").fillna(0)
+    temp["总收入"] = clean_number_series(temp["总收入"]).fillna(0)
+    temp["总利润"] = clean_number_series(temp["总利润"]).fillna(0)
+    temp["利润率"] = clean_number_series(temp["利润率"]).fillna(0)
 
     temp = temp.dropna(subset=["日期"]).copy()
     temp["年月"] = temp["日期"].dt.strftime("%Y-%m")
     temp["日期文本"] = temp["日期"].dt.strftime("%Y-%m-%d")
     return temp
-
-
-def format_jpy(v):
-    return f"¥ {int(v):,}"
 
 
 def _build_item_cards_html(valid_df: pd.DataFrame) -> str:
@@ -656,7 +770,16 @@ def export_quote_png(
     )
 
     file_name = f"{quote_id}.png"
-    hti = Html2Image(output_path=EXPORT_DIR)
+    browser_executable = detect_browser_executable()
+
+    if browser_executable:
+        hti = Html2Image(
+            output_path=EXPORT_DIR,
+            browser_executable=browser_executable
+        )
+    else:
+        # 让 html2image 自己尝试；如果云端无浏览器，会在外层被捕获并提示
+        hti = Html2Image(output_path=EXPORT_DIR)
 
     hti.screenshot(
         html_str=html_code,
@@ -727,7 +850,7 @@ html, body, [class*="css"] {
 .pay-warning {
     color: #E74C3C;
     font-weight: 800;
-    font-size: 0 .92rem;
+    font-size: 0.92rem;
     margin-bottom: 3px;
 }
 
@@ -1008,10 +1131,7 @@ if menu == "新建报价":
 
     p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0
 
-    # 第一笔
     payment1_jpy = p_rev
-
-    # 第二笔逻辑：服务费 + 通道费先收，国际运费到货后再结算
     disp_service_fee = int(p_rev * (service_pct / 100))
     disp_pay_fee = int((p_rev + disp_service_fee) * (pay_fee_pct / 100))
     p2_total = disp_service_fee + disp_pay_fee
@@ -1305,40 +1425,45 @@ if menu == "新建报价":
 
     with s3:
         if st.button("🖼️ 导出报价图片", use_container_width=True):
-            qr_p = os.path.join(QR_DIR, f"{pay_method}.png")
-            export_path = export_quote_png(
-                client=client,
-                quote_id=quote_id,
-                valid_time=valid_time,
-                rate=rate,
-                valid_df=valid_df,
-                payment1_jpy=payment1_jpy,
-                p_rev_original=p_rev_original,
-                p_rev=p_rev,
-                discount_amount=discount_amount,
-                service_pct=service_pct,
-                disp_service_fee=disp_service_fee,
-                pay_fee_pct=pay_fee_pct,
-                disp_pay_fee=disp_pay_fee,
-                freight_status=freight_status,
-                w=w,
-                ship_total_quote=ship_total_quote,
-                p2_total=p2_total,
-                grand_total_jpy=grand_total_jpy,
-                grand_total_rmb=grand_total_rmb,
-                qr_abs_path=qr_p
-            )
-
-            st.success(f"报价图片已生成：{export_path}")
-
-            with open(export_path, "rb") as f:
-                st.download_button(
-                    "⬇️ 下载报价图片",
-                    data=f,
-                    file_name=os.path.basename(export_path),
-                    mime="image/png",
-                    use_container_width=True
+            try:
+                qr_p = os.path.join(QR_DIR, f"{pay_method}.png")
+                export_path = export_quote_png(
+                    client=client,
+                    quote_id=quote_id,
+                    valid_time=valid_time,
+                    rate=rate,
+                    valid_df=valid_df,
+                    payment1_jpy=payment1_jpy,
+                    p_rev_original=p_rev_original,
+                    p_rev=p_rev,
+                    discount_amount=discount_amount,
+                    service_pct=service_pct,
+                    disp_service_fee=disp_service_fee,
+                    pay_fee_pct=pay_fee_pct,
+                    disp_pay_fee=disp_pay_fee,
+                    freight_status=freight_status,
+                    w=w,
+                    ship_total_quote=ship_total_quote,
+                    p2_total=p2_total,
+                    grand_total_jpy=grand_total_jpy,
+                    grand_total_rmb=grand_total_rmb,
+                    qr_abs_path=qr_p
                 )
+
+                st.success(f"报价图片已生成：{export_path}")
+
+                with open(export_path, "rb") as f:
+                    st.download_button(
+                        "⬇️ 下载报价图片",
+                        data=f,
+                        file_name=os.path.basename(export_path),
+                        mime="image/png",
+                        use_container_width=True
+                    )
+            except FileNotFoundError:
+                st.error("当前运行环境未安装 Chrome / Chromium，暂时无法生成报价图片。请先在部署环境安装浏览器，或改用可复制文本报价。")
+            except Exception as e:
+                st.error(f"导出报价图片失败：{e}")
 
 
 # --- 5. 历史订单 ---
@@ -1350,6 +1475,10 @@ elif menu == "历史订单":
         st.info("暂无历史订单。")
     else:
         show_df = history.copy()
+        show_df["总收入"] = clean_number_series(show_df["总收入"]).fillna(0).map(safe_format_jpy)
+        show_df["总利润"] = clean_number_series(show_df["总利润"]).fillna(0).map(safe_format_jpy)
+        show_df["利润率"] = clean_number_series(show_df["利润率"]).fillna(0).map(lambda x: f"{float(x):.2f}%")
+
         st.dataframe(show_df, use_container_width=True, hide_index=True)
 
         st.markdown("### 报价转成交")
@@ -1375,6 +1504,9 @@ elif menu == "历史订单":
 
         st.markdown("### 删除订单记录")
         delete_df = history.copy()
+
+        delete_df["总收入_清洗"] = clean_number_series(delete_df["总收入"]).fillna(0)
+
         delete_df["展示"] = (
             delete_df["日期"].astype(str)
             + " | "
@@ -1384,7 +1516,7 @@ elif menu == "历史订单":
             + " | "
             + delete_df["状态"].astype(str)
             + " | "
-            + delete_df["总收入"].fillna(0).astype(float).map(lambda x: f"¥{int(x):,}")
+            + delete_df["总收入_清洗"].map(safe_format_jpy)
         )
 
         selected_labels = st.multiselect("选择要删除的报价/订单记录", delete_df["展示"].tolist())
@@ -1535,4 +1667,3 @@ elif menu == "系统设置":
         with open(os.path.join(QR_DIR, "微信支付.png"), "wb") as f:
             f.write(up_qr.getbuffer())
         st.success("二维码保存成功")
-        

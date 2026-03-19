@@ -1,1 +1,4 @@
 chromium
+fonts-noto-cjk
+fonts-wqy-zenhei
+fonts-wqy-microhei

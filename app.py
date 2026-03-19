@@ -774,9 +774,9 @@ def export_quote_png(
 
     if browser_executable:
         hti = Html2Image(
-            output_path=EXPORT_DIR,
-            browser_executable=browser_executable
-        )
+    output_path=EXPORT_DIR,
+    browser_executable="/usr/bin/chromium"
+)
     else:
         # 让 html2image 自己尝试；如果云端无浏览器，会在外层被捕获并提示
         hti = Html2Image(output_path=EXPORT_DIR)

@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import os
 import html
+import re
 import shutil
 from pathlib import Path
 
@@ -129,6 +130,13 @@ def safe_format_jpy(v):
         return f"¥{int(float(v)):,}"
     except Exception:
         return "¥0"
+
+
+def clean_filename(name):
+    if not name:
+        return "未命名客户"
+    cleaned = re.sub(r'[\\/*?:"<>|]', "", str(name)).strip()
+    return cleaned or "未命名客户"
 
 
 def detect_browser_executable():
@@ -769,14 +777,16 @@ def export_quote_png(
         qr_abs_path=qr_abs_path,
     )
 
-    file_name = f"{quote_id}.png"
+    client_safe = clean_filename(client)
+    date_str = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+    file_name = f"{client_safe}_报价单_{date_str}.png"
     browser_executable = detect_browser_executable()
 
     if browser_executable:
         hti = Html2Image(
-    output_path=EXPORT_DIR,
-    browser_executable="/usr/bin/chromium"
-)
+            output_path=EXPORT_DIR,
+            browser_executable=browser_executable
+        )
     else:
         # 让 html2image 自己尝试；如果云端无浏览器，会在外层被捕获并提示
         hti = Html2Image(output_path=EXPORT_DIR)

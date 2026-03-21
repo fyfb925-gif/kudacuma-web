@@ -73,7 +73,6 @@ def clean_number_series(series: pd.Series) -> pd.Series:
             "null": None,
             "-": None,
         },
-        key="quote_items_editor"
     )
 
     s = (

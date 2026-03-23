@@ -1,82 +1,82 @@
-    import streamlit as st
-    import pandas as pd
-    import datetime
-    import os
-    import html
-    import shutil
-    from pathlib import Path
-    
-    import gspread
-    from google.oauth2.service_account import Credentials
-    from html2image import Html2Image
-    
-    # --- 1. 基础配置 ---
-    st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V11.8", layout="wide")
-    
-    DB_FILE = "kudacuma_history.csv"
-    QR_DIR = "qr_codes"
-    EXPORT_DIR = "exports"
-    
-    # Google Sheets 配置
-    SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"
-    HISTORY_WORKSHEET = "history"
-    
-    BASE_COLUMNS = [
-    "日期", "客户", "单号", "状态", "运费状态", "总收入", "总利润", "利润率"
-    ]
-    
-    if not os.path.exists(QR_DIR):
-    os.makedirs(QR_DIR)
-    
-    if not os.path.exists(EXPORT_DIR):
-    os.makedirs(EXPORT_DIR)
-    
-    if not os.path.exists(DB_FILE):
-    pd.DataFrame(columns=BASE_COLUMNS).to_csv(
-        DB_FILE, index=False, encoding="utf-8-sig"
-    )
-    
-    
-    # =========================
-    # 数据清洗 / 格式化工具函数
-    # =========================
-    def clean_number_series(series: pd.Series) -> pd.Series:
-    """
-    将金额/百分比等混合字符串安全转为数值。
-    可处理:
-    - 12000
-    - "12000"
-    - "¥12,000"
-    - "12,000"
-    - "25%"
-    - ""
-    - None
-    - nan
-    """
-    if series is None:
-        return pd.Series(dtype="float64")
-    
-    s = series.astype(str).str.strip()
-    s = s.replace(
-        {
-            "": None,
-            "None": None,
-            "none": None,
-            "nan": None,
-            "NaN": None,
-            "NULL": None,
-            "null": None,
-            "-": None,
-        }
-    )
-    
-    s = (
-        s.str.replace("¥", "", regex=False)
-         .str.replace(",", "", regex=False)
-         .str.replace("%", "", regex=False)
-         .str.replace("RMB", "", regex=False)
-         .str.replace("JPY", "", regex=False)
-         .str.strip()
+import streamlit as st
+import pandas as pd
+import datetime
+import os
+import html
+import shutil
+from pathlib import Path
+
+import gspread
+from google.oauth2.service_account import Credentials
+from html2image import Html2Image
+
+# --- 1. 基础配置 ---
+st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V11.8", layout="wide")
+
+DB_FILE = "kudacuma_history.csv"
+QR_DIR = "qr_codes"
+EXPORT_DIR = "exports"
+
+# Google Sheets 配置
+SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"
+HISTORY_WORKSHEET = "history"
+
+BASE_COLUMNS = [
+"日期", "客户", "单号", "状态", "运费状态", "总收入", "总利润", "利润率"
+]
+
+if not os.path.exists(QR_DIR):
+os.makedirs(QR_DIR)
+
+if not os.path.exists(EXPORT_DIR):
+os.makedirs(EXPORT_DIR)
+
+if not os.path.exists(DB_FILE):
+pd.DataFrame(columns=BASE_COLUMNS).to_csv(
+DB_FILE, index=False, encoding="utf-8-sig"
+)
+
+
+# =========================
+# 数据清洗 / 格式化工具函数
+# =========================
+def clean_number_series(series: pd.Series) -> pd.Series:
+"""
+将金额/百分比等混合字符串安全转为数值。
+可处理:
+- 12000
+- "12000"
+- "¥12,000"
+- "12,000"
+- "25%"
+- ""
+- None
+- nan
+"""
+if series is None:
+return pd.Series(dtype="float64")
+
+s = series.astype(str).str.strip()
+s = s.replace(
+{
+"": None,
+"None": None,
+"none": None,
+"nan": None,
+"NaN": None,
+"NULL": None,
+"null": None,
+"-": None,
+}
+)
+
+s = (
+s.str.replace("¥", "", regex=False)
+.str.replace(",", "", regex=False)
+.str.replace("%", "", regex=False)
+.str.replace("RMB", "", regex=False)
+.str.replace("JPY", "", regex=False)
+.str.strip()
     )
     
     return pd.to_numeric(s, errors="coerce")

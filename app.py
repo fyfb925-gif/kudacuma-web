@@ -1149,17 +1149,17 @@ discount_amount = p_rev_original - p_rev
 
 p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0
 
-    payment1_jpy = p_rev
-    disp_service_fee = int(p_rev * (service_pct / 100))
-    disp_pay_fee = int((p_rev + disp_service_fee) * (pay_fee_pct / 100))
-    p2_total = disp_service_fee + disp_pay_fee
+payment1_jpy = p_rev
+disp_service_fee = int(p_rev * (service_pct / 100))
+disp_pay_fee = int((p_rev + disp_service_fee) * (pay_fee_pct / 100))
+p2_total = disp_service_fee + disp_pay_fee
 
-    if freight_status == "已确认":
-        grand_total_jpy = p_rev + p2_total + ship_total_quote
-    else:
-        grand_total_jpy = p_rev + p2_total
+if freight_status == "已确认":
+    grand_total_jpy = p_rev + p2_total + ship_total_quote
+else:
+    grand_total_jpy = p_rev + p2_total
 
-    grand_total_rmb = round(grand_total_jpy * rate, 2)
+grand_total_rmb = round(grand_total_jpy * rate, 2)
 
     with st.sidebar:
         loss_gap = int(grand_total_jpy * 0.02) if grand_total_jpy > 0 else 0

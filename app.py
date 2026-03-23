@@ -1085,32 +1085,41 @@ if menu == "新建报价":
         u_c = f3.number_input("成本运费 (JPY)", min_value=0, value=0, step=1)
 
     other_c = f4.number_input("额外杂费", min_value=0, value=0, step=100)
+    manual_discount = st.number_input("优惠金额 (JPY)", min_value=0, value=0, step=100)
 
     ship_total_quote = int(w * u_q)
     ship_total_cost = int(w * u_c)
 
     st.info("💡 可在【折扣】列为不同商品单独设置折扣，100 即为不打折。按 Tab 键可更快录入。")
 
-    df_input = st.data_editor(
-        pd.DataFrame([{
-            "商品": "",
-            "数量": 1,
-            "售价": 0,
-            "折扣": 100.0,
-            "成本": 0
-        }]),
-        num_rows="dynamic",
-        width="stretch",
-        hide_index=True,
-        row_height=38,
-        column_config={
-            "商品": st.column_config.TextColumn("商品", width="large", required=True),
-            "数量": st.column_config.NumberColumn("数量", min_value=0, step=1, width="small"),
-            "售价": st.column_config.NumberColumn("售价", min_value=0, step=100, width="small"),
-            "折扣": st.column_config.NumberColumn("折扣", min_value=0.0, max_value=100.0, step=1.0, width="small"),
-            "成本": st.column_config.NumberColumn("成本", min_value=0, step=100, width="small"),
-        }
-    )
+# ===== 修复商品录入乱跳：表格数据放进 session_state 持久保存 =====
+if "quote_items_df" not in st.session_state:
+    st.session_state.quote_items_df = pd.DataFrame([{
+        "商品": "",
+        "数量": 1,
+        "售价": 0,
+        "折扣": 100.0,
+        "成本": 0
+    }])
+
+df_input = st.data_editor(
+    st.session_state.quote_items_df,
+    key="quote_items_editor",
+    num_rows="dynamic",
+    width="stretch",
+    hide_index=True,
+    row_height=38,
+    column_config={
+        "商品": st.column_config.TextColumn("商品", width="large", required=False),
+        "数量": st.column_config.NumberColumn("数量", min_value=0, step=1, width="small"),
+        "售价": st.column_config.NumberColumn("售价", step=100, width="small"),
+        "折扣": st.column_config.NumberColumn("折扣", min_value=0.0, max_value=100.0, step=1.0, width="small"),
+        "成本": st.column_config.NumberColumn("成本", step=100, width="small"),
+    }
+)
+
+# 每次编辑后回写，避免 rerun 时丢失
+st.session_state.quote_items_df = df_input.copy()
 
     valid_df = df_input.copy()
     valid_df["商品"] = valid_df["商品"].fillna("").astype(str)
@@ -1125,8 +1134,12 @@ if menu == "新建报价":
         valid_df["项原价"] = valid_df["数量"] * valid_df["售价"]
         valid_df["项折后"] = valid_df["项原价"] * (valid_df["折扣"] / 100.0)
 
-    p_rev_original = int(valid_df["项原价"].sum()) if not valid_df.empty else 0
-    p_rev = int(valid_df["项折后"].sum()) if not valid_df.empty else 0
+    p_rev_original = int(valid_df["项原价"].sum())
+    p_rev_after_item_discount = int(valid_df["项折后"].sum())
+
+    manual_discount = int(manual_discount)
+    p_rev = max(0, p_rev_after_item_discount - manual_discount)
+
     discount_amount = p_rev_original - p_rev
 
     p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0

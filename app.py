@@ -129,9 +129,16 @@ def safe_format_jpy(v):
         return f"¥{int(float(v)):,}"
     except Exception:
         return "¥0"
-
+        
+def format_signed_jpy(v):
+    try:
+        n = int(float(v))
+        return f"-¥ {abs(n):,}" if n < 0 else f"¥ {n:,}"
+    except Exception:
+        return "¥ 0"
 
 def detect_browser_executable():
+    
     """
     为 html2image 自动探测可用浏览器。
     本地 / Streamlit Cloud / Linux 环境都尽量兼容。
@@ -289,7 +296,7 @@ def _build_item_cards_html(valid_df: pd.DataFrame) -> str:
             "<div class='item-card'>"
             f"<div class='item-main-row'>"
             f"<span>• {item_name} x{qty}{disc_tag}</span>"
-            f"<span>¥ {orig_price:,}</span>"
+            f"<span>{format_signed_jpy(orig_price)}</span>"
             "</div>"
         )
 
@@ -297,7 +304,7 @@ def _build_item_cards_html(valid_df: pd.DataFrame) -> str:
             card_html += (
                 "<div class='item-sub-row'>"
                 "<span>折后金额</span>"
-                f"<span>¥ {discounted_price:,}</span>"
+                f"<span>{format_signed_jpy(discounted_price)}</span>"
                 "</div>"
             )
 
@@ -1110,16 +1117,21 @@ if "quote_items_editor" not in st.session_state:
     st.session_state["quote_items_editor"] = st.session_state["quote_items_df"].to_dict("records")
 
 df_input = st.data_editor(
-    st.session_state["quote_items_df"],
-    key="quote_items_editor",
+    pd.DataFrame([{
+        "商品": "",
+        "数量": 1,
+        "售价": 0,
+        "折扣": 100.0,
+        "成本": 0
+    }]),
     num_rows="dynamic",
     width="stretch",
     hide_index=True,
     row_height=38,
     column_config={
-        "商品": st.column_config.TextColumn("商品", width="large", required=False),
+        "商品": st.column_config.TextColumn("商品", width="large", required=True),
         "数量": st.column_config.NumberColumn("数量", min_value=0, step=1, width="small", format="%d"),
-        "售价": st.column_config.NumberColumn("售价", min_value=0, step=1, width="small", format="%d"),
+        "售价": st.column_config.NumberColumn("售价", step=1, width="small", format="%d"),
         "折扣": st.column_config.NumberColumn("折扣", min_value=0.0, max_value=100.0, step=1.0, width="small", format="%.1f"),
         "成本": st.column_config.NumberColumn("成本", min_value=0, step=1, width="small", format="%d"),
     }
@@ -1134,18 +1146,21 @@ valid_df = valid_df[valid_df["商品"].str.strip() != ""].copy()
 
 if not valid_df.empty:
     valid_df["数量"] = pd.to_numeric(valid_df["数量"], errors="coerce").fillna(0).clip(lower=0).astype(int)
-    valid_df["售价"] = pd.to_numeric(valid_df["售价"], errors="coerce").fillna(0).clip(lower=0)
-    valid_df["折扣"] = pd.to_numeric(valid_df["折扣"], errors="coerce").fillna(100.0).clip(lower=0, upper=100)
-    valid_df["成本"] = pd.to_numeric(valid_df["成本"], errors="coerce").fillna(0).clip(lower=0)
+    valid_df["售价"] = pd.to_numeric(valid_df["售价"], errors="coerce").fillna(0).astype(float)
+    valid_df["折扣"] = pd.to_numeric(valid_df["折扣"], errors="coerce").fillna(100.0).clip(lower=0, upper=100).astype(float)
+    valid_df["成本"] = pd.to_numeric(valid_df["成本"], errors="coerce").fillna(0).clip(lower=0).astype(float)
 
     valid_df["项原价"] = valid_df["数量"] * valid_df["售价"]
     valid_df["项折后"] = valid_df["项原价"] * (valid_df["折扣"] / 100.0)
 else:
     valid_df = pd.DataFrame(columns=["商品", "数量", "售价", "折扣", "成本", "项原价", "项折后"])
 
-    p_rev_original = int(valid_df["项原价"].sum()) if not valid_df.empty else 0
-    p_rev = int(valid_df["项折后"].sum()) if not valid_df.empty else 0
-    discount_amount = p_rev_original - p_rev
+p_rev_original = int(valid_df["项原价"].sum()) if not valid_df.empty else 0
+p_rev = int(valid_df["项折后"].sum()) if not valid_df.empty else 0
+
+discount_amount = p_rev_original - p_rev
+manual_minus_amount = int(abs(valid_df.loc[valid_df["项折后"] < 0, "项折后"].sum())) if not valid_df.empty else 0
+total_reduce_amount = discount_amount + manual_minus_amount
 
     p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0
 
@@ -1261,14 +1276,11 @@ else:
                 "</div>"
             )
 
-            if discount_amount > 0:
-                summary_html += (
-                    f"<div class='summary-row strong'>"
-                    f"<span>折后金额合计</span><span>¥ {p_rev:,}</span>"
-                    "</div>"
-                    f"<div class='summary-row discount'>"
-                    f"<span class='discount-text'>优惠折扣总计</span><span class='discount-text'>-¥ {discount_amount:,}</span>"
-                    "</div>"
+           if total_reduce_amount > 0:
+    summary_html += (
+        f"<div class='summary-row strong'><span>调整后商品合计</span><span>¥ {p_rev:,}</span></div>"
+        f"<div class='summary-row discount'><span>优惠/减免合计</span><span>-¥ {total_reduce_amount:,}</span></div>"
+    )
                 )
         else:
             items_html = "<div style='color:#bbb; padding:12px 0; font-size:0.92rem;'>等待录入...</div>"

@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import os
 import html
+import re
 import shutil
 from pathlib import Path
 
@@ -22,7 +23,11 @@ SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"
 HISTORY_WORKSHEET = "history"
 
 BASE_COLUMNS = [
-    "日期", "客户", "单号", "状态", "运费状态", "总收入", "总利润", "利润率"
+    "日期", "客户", "单号", "状态", "运费状态", "总收入", "总利润", "利润率",
+    "版本", "来源单号", "根单号", "是否修订版", "商品明细", "汇率", "有效期",
+    "服务费%", "手续费%", "重量KG", "报价运费JPY", "成本运费JPY", "额外杂费",
+    "收款通道", "Payment1JPY", "Payment2JPY", "商品原价合计", "商品折后合计",
+    "优惠金额", "图片路径"
 ]
 
 if not os.path.exists(QR_DIR):
@@ -67,7 +72,7 @@ def clean_number_series(series: pd.Series) -> pd.Series:
             "NULL": None,
             "null": None,
             "-": None,
-        }
+        },
     )
 
     s = (
@@ -90,6 +95,17 @@ def ensure_history_columns(df: pd.DataFrame) -> pd.DataFrame:
                 df[col] = "成交"
             elif col == "运费状态":
                 df[col] = "已确认"
+            elif col == "版本":
+                df[col] = 1
+            elif col == "是否修订版":
+                df[col] = "否"
+            elif col in ["汇率", "服务费%", "手续费%", "重量KG", "报价运费JPY", "成本运费JPY",
+                         "额外杂费", "Payment1JPY", "Payment2JPY", "商品原价合计", "商品折后合计", "优惠金额"]:
+                df[col] = 0
+            elif col == "有效期":
+                df[col] = "48 Hours"
+            elif col == "商品明细":
+                df[col] = "[]"
             else:
                 df[col] = ""
     return df[BASE_COLUMNS].copy()
@@ -105,14 +121,19 @@ def normalize_history_df(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     df["日期"] = pd.to_datetime(df["日期"], errors="coerce").dt.date
-    df["客户"] = df["客户"].fillna("").astype(str)
-    df["单号"] = df["单号"].fillna("").astype(str)
-    df["状态"] = df["状态"].fillna("报价").astype(str)
-    df["运费状态"] = df["运费状态"].fillna("已确认").astype(str)
+    text_cols = ["客户", "单号", "状态", "运费状态", "来源单号", "根单号", "是否修订版", "商品明细", "有效期", "收款通道", "图片路径"]
+    for col in text_cols:
+        if col in df.columns:
+            df[col] = df[col].fillna("").astype(str)
 
-    for col in ["总收入", "总利润", "利润率"]:
+    for col in ["总收入", "总利润", "利润率", "版本", "汇率", "服务费%", "手续费%", "重量KG", "报价运费JPY",
+                "成本运费JPY", "额外杂费", "Payment1JPY", "Payment2JPY", "商品原价合计", "商品折后合计", "优惠金额"]:
         if col in df.columns:
             df[col] = clean_number_series(df[col]).fillna(0)
+
+    df["版本"] = df["版本"].astype(int).clip(lower=1)
+    df["是否修订版"] = df["是否修订版"].replace({"True": "是", "False": "否"}).fillna("否")
+    df.loc[df["根单号"].str.strip() == "", "根单号"] = df["单号"]
 
     return df
 
@@ -129,6 +150,13 @@ def safe_format_jpy(v):
         return f"¥{int(float(v)):,}"
     except Exception:
         return "¥0"
+
+
+def clean_filename(name):
+    if not name:
+        return "未命名客户"
+    cleaned = re.sub(r'[\\/*?:"<>|]', "", str(name)).strip()
+    return cleaned or "未命名客户"
 
 
 def detect_browser_executable():
@@ -152,6 +180,161 @@ def detect_browser_executable():
         if path and os.path.exists(path):
             return path
     return None
+
+
+def make_empty_items_df():
+    return pd.DataFrame([{
+        "商品": "",
+        "数量": 1,
+        "售价": 0,
+        "折扣": 100.0,
+        "成本": 0
+    }])
+
+
+def serialize_items_df(df: pd.DataFrame) -> str:
+    if df is None or df.empty:
+        return "[]"
+    export_df = df.copy()
+    for col in ["商品", "数量", "售价", "折扣", "成本"]:
+        if col not in export_df.columns:
+            export_df[col] = "" if col == "商品" else 0
+    export_df = export_df[["商品", "数量", "售价", "折扣", "成本"]].copy()
+    export_df = export_df.fillna("")
+    return export_df.to_json(orient="records", force_ascii=False)
+
+
+def parse_items_json(raw) -> pd.DataFrame:
+    if raw is None:
+        return make_empty_items_df()
+    text = str(raw).strip()
+    if not text or text in ["nan", "None", "[]"]:
+        return make_empty_items_df()
+    try:
+        df = pd.read_json(text)
+        if df.empty:
+            return make_empty_items_df()
+        for col in ["商品", "数量", "售价", "折扣", "成本"]:
+            if col not in df.columns:
+                df[col] = "" if col == "商品" else 0
+        df = df[["商品", "数量", "售价", "折扣", "成本"]].copy()
+        df["商品"] = df["商品"].fillna("").astype(str)
+        df["数量"] = pd.to_numeric(df["数量"], errors="coerce").fillna(1).astype(int)
+        df["售价"] = pd.to_numeric(df["售价"], errors="coerce").fillna(0)
+        df["折扣"] = pd.to_numeric(df["折扣"], errors="coerce").fillna(100.0)
+        df["成本"] = pd.to_numeric(df["成本"], errors="coerce").fillna(0)
+        return df
+    except Exception:
+        return make_empty_items_df()
+
+
+def init_form_state():
+    defaults = {
+        "client_input": "新客户",
+        "rate_input": 0.0450,
+        "valid_time_input": "48 Hours",
+        "quote_id_input": f"KDKM-{datetime.datetime.now().strftime('%m%d%H%M')}",
+        "service_pct_input": 10.0,
+        "pay_fee_pct_input": 3.0,
+        "freight_status_input": "已确认",
+        "pay_method_input": "微信支付",
+        "weight_input": 1.0,
+        "quote_freight_input": 2200,
+        "cost_freight_input": 1400,
+        "other_cost_input": 0,
+        "editor_df": make_empty_items_df(),
+        "edit_mode": False,
+        "edit_source_quote_id": "",
+        "edit_root_quote_id": "",
+        "edit_version": 1,
+        "pending_reset_after_save": False,
+        "pending_success_message": "",
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+
+def reset_form_state():
+    st.session_state["client_input"] = "新客户"
+    st.session_state["rate_input"] = 0.0450
+    st.session_state["valid_time_input"] = "48 Hours"
+    st.session_state["quote_id_input"] = f"KDKM-{datetime.datetime.now().strftime('%m%d%H%M')}"
+    st.session_state["service_pct_input"] = 10.0
+    st.session_state["pay_fee_pct_input"] = 3.0
+    st.session_state["freight_status_input"] = "已确认"
+    st.session_state["pay_method_input"] = "微信支付"
+    st.session_state["weight_input"] = 1.0
+    st.session_state["quote_freight_input"] = 2200
+    st.session_state["cost_freight_input"] = 1400
+    st.session_state["other_cost_input"] = 0
+    st.session_state["editor_df"] = make_empty_items_df()
+    st.session_state["edit_mode"] = False
+    st.session_state["edit_source_quote_id"] = ""
+    st.session_state["edit_root_quote_id"] = ""
+    st.session_state["edit_version"] = 1
+    st.session_state["pending_reset_after_save"] = False
+    st.session_state["pending_success_message"] = ""
+
+    if "items_editor" in st.session_state:
+        del st.session_state["items_editor"]
+
+
+def apply_pending_reset_if_needed():
+    if not st.session_state.get("pending_reset_after_save", False):
+        return
+
+    st.session_state["client_input"] = "新客户"
+    st.session_state["rate_input"] = 0.0450
+    st.session_state["valid_time_input"] = "48 Hours"
+    st.session_state["quote_id_input"] = get_next_quote_id()
+    st.session_state["service_pct_input"] = 10.0
+    st.session_state["pay_fee_pct_input"] = 3.0
+    st.session_state["freight_status_input"] = "已确认"
+    st.session_state["pay_method_input"] = "微信支付"
+    st.session_state["weight_input"] = 1.0
+    st.session_state["quote_freight_input"] = 2200
+    st.session_state["cost_freight_input"] = 1400
+    st.session_state["other_cost_input"] = 0
+    st.session_state["editor_df"] = make_empty_items_df()
+    st.session_state["edit_mode"] = False
+    st.session_state["edit_source_quote_id"] = ""
+    st.session_state["edit_root_quote_id"] = ""
+    st.session_state["edit_version"] = 1
+
+    if "items_editor" in st.session_state:
+        del st.session_state["items_editor"]
+
+    st.session_state["pending_reset_after_save"] = False
+
+
+def get_next_quote_id():
+    return f"KDKM-{datetime.datetime.now().strftime('%m%d%H%M%S')}"
+
+
+def load_record_into_form(record: dict):
+    st.session_state["client_input"] = str(record.get("客户", "新客户") or "新客户")
+    st.session_state["rate_input"] = float(pd.to_numeric(record.get("汇率", 0.0450), errors="coerce") or 0.0450)
+    st.session_state["valid_time_input"] = str(record.get("有效期", "48 Hours") or "48 Hours")
+    st.session_state["service_pct_input"] = float(pd.to_numeric(record.get("服务费%", 10.0), errors="coerce") or 10.0)
+    st.session_state["pay_fee_pct_input"] = float(pd.to_numeric(record.get("手续费%", 3.0), errors="coerce") or 3.0)
+    st.session_state["freight_status_input"] = str(record.get("运费状态", "已确认") or "已确认")
+    st.session_state["pay_method_input"] = str(record.get("收款通道", "微信支付") or "微信支付")
+    st.session_state["weight_input"] = float(pd.to_numeric(record.get("重量KG", 0), errors="coerce") or 0)
+    st.session_state["quote_freight_input"] = int(pd.to_numeric(record.get("报价运费JPY", 0), errors="coerce") or 0)
+    st.session_state["cost_freight_input"] = int(pd.to_numeric(record.get("成本运费JPY", 0), errors="coerce") or 0)
+    st.session_state["other_cost_input"] = int(pd.to_numeric(record.get("额外杂费", 0), errors="coerce") or 0)
+    st.session_state["editor_df"] = parse_items_json(record.get("商品明细"))
+    st.session_state["edit_mode"] = True
+    st.session_state["edit_source_quote_id"] = str(record.get("单号", "") or "")
+    root_quote_id = str(record.get("根单号", "") or record.get("单号", "") or "")
+    st.session_state["edit_root_quote_id"] = root_quote_id
+    current_version = int(pd.to_numeric(record.get("版本", 1), errors="coerce") or 1)
+    st.session_state["edit_version"] = current_version + 1
+    st.session_state["quote_id_input"] = get_next_quote_id()
+
+    if "items_editor" in st.session_state:
+        del st.session_state["items_editor"]
 
 
 # --- Google Sheets 工具函数 ---
@@ -769,14 +952,19 @@ def export_quote_png(
         qr_abs_path=qr_abs_path,
     )
 
-    file_name = f"{quote_id}.png"
+    client_safe = clean_filename(client)
+    date_str = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+    version_suffix = ""
+    if "edit_mode" in st.session_state and st.session_state.get("edit_mode"):
+        version_suffix = f"_V{int(st.session_state.get('edit_version', 1) or 1)}"
+    file_name = f"{client_safe}_报价单{version_suffix}_{date_str}.png"
     browser_executable = detect_browser_executable()
 
     if browser_executable:
         hti = Html2Image(
-    output_path=EXPORT_DIR,
-    browser_executable="/usr/bin/chromium"
-)
+            output_path=EXPORT_DIR,
+            browser_executable=browser_executable
+        )
     else:
         # 让 html2image 自己尝试；如果云端无浏览器，会在外层被捕获并提示
         hti = Html2Image(output_path=EXPORT_DIR)
@@ -1049,56 +1237,67 @@ div[data-testid="stDataEditor"] textarea {
 </style>
 """, unsafe_allow_html=True)
 
+init_form_state()
+apply_pending_reset_if_needed()
+
+if st.session_state.get("pending_success_message"):
+    st.success(st.session_state["pending_success_message"])
+    st.session_state["pending_success_message"] = ""
+
 # --- 3. 菜单 ---
 with st.sidebar:
-    st.title("🐻 KDKM V11.8")
-    menu = st.radio("导航", ["新建报价", "历史订单", "运营分析", "系统设置"])
+    st.title("🐻 KDKM V12.0")
+    menu = st.radio("导航", ["新建报价", "历史订单", "运营分析", "系统设置"], key="menu")
 
 
 # --- 4. 新建报价 ---
 if menu == "新建报价":
+    if st.session_state.get("edit_mode", False):
+        st.info(
+            f"📝 当前为修订模式：将基于来源单号 {st.session_state.get('edit_source_quote_id', '')} "
+            f"生成 V{st.session_state.get('edit_version', 1)} 新版本，不会覆盖旧记录。"
+        )
     with st.container(border=True):
         c1, c2, c3, c4 = st.columns(4)
-        client = c1.text_input("客户姓名", "新客户")
-        rate = c2.number_input("结算汇率", value=0.0450, format="%.4f")
-        valid_time = c3.selectbox("有效期", ["48 Hours", "24 Hours", "3 Days"])
-        quote_id = c4.text_input("单号", f"KDKM-{datetime.datetime.now().strftime('%m%d%H%M')}")
+        client = c1.text_input("客户姓名", key="client_input")
+        rate = c2.number_input("结算汇率", format="%.4f", key="rate_input")
+        valid_time = c3.selectbox("有效期", ["48 Hours", "24 Hours", "3 Days"], key="valid_time_input")
+        quote_id = c4.text_input("单号", key="quote_id_input")
 
         d1, d2, d3, d4 = st.columns(4)
-        service_pct = d1.number_input("服务费 %", value=10.0, step=0.5)
-        pay_fee_pct = d2.number_input("手续费 %", value=3.0, step=0.1)
-        freight_status = d3.selectbox("运费状态", ["已确认", "待确认"])
+        service_pct = d1.number_input("服务费 %", step=0.5, key="service_pct_input")
+        pay_fee_pct = d2.number_input("手续费 %", step=0.1, key="pay_fee_pct_input")
+        freight_status = d3.selectbox("运费状态", ["已确认", "待确认"], key="freight_status_input")
 
         qr_list = [f.replace(".png", "") for f in os.listdir(QR_DIR) if f.endswith(".png")]
-        pay_method = d4.selectbox("收款通道", ["微信支付"] + qr_list)
+        pay_method = d4.selectbox("收款通道", ["微信支付"] + qr_list, key="pay_method_input")
 
     st.markdown('<div class="control-title">📦 商品录入与成本控制</div>', unsafe_allow_html=True)
     f1, f2, f3, f4 = st.columns(4)
 
     if freight_status == "已确认":
-        w = f1.number_input("重量 (KG)", min_value=0.0, value=1.0, step=0.1)
-        u_q = f2.number_input("报价运费 (JPY)", min_value=0, value=2200, step=1)
-        u_c = f3.number_input("成本运费 (JPY)", min_value=0, value=1400, step=1)
+        w = f1.number_input("重量 (KG)", min_value=0.0, step=0.1, key="weight_input")
+        u_q = f2.number_input("报价运费 (JPY)", min_value=0, step=1, key="quote_freight_input")
+        u_c = f3.number_input("成本运费 (JPY)", min_value=0, step=1, key="cost_freight_input")
     else:
-        w = f1.number_input("重量 (KG)", min_value=0.0, value=0.0, step=0.1)
-        u_q = f2.number_input("报价运费 (JPY)", min_value=0, value=0, step=1)
-        u_c = f3.number_input("成本运费 (JPY)", min_value=0, value=0, step=1)
+        w = f1.number_input("重量 (KG)", min_value=0.0, step=0.1, key="weight_input")
+        u_q = f2.number_input("报价运费 (JPY)", min_value=0, step=1, key="quote_freight_input")
+        u_c = f3.number_input("成本运费 (JPY)", min_value=0, step=1, key="cost_freight_input")
 
-    other_c = f4.number_input("额外杂费", min_value=0, value=0, step=100)
+    other_c = f4.number_input("额外杂费", min_value=0, step=100, key="other_cost_input")
 
     ship_total_quote = int(w * u_q)
     ship_total_cost = int(w * u_c)
 
     st.info("💡 可在【折扣】列为不同商品单独设置折扣，100 即为不打折。按 Tab 键可更快录入。")
 
+    editor_seed = st.session_state.get("editor_df", make_empty_items_df()).copy()
+    if editor_seed.empty:
+        editor_seed = make_empty_items_df()
+
     df_input = st.data_editor(
-        pd.DataFrame([{
-            "商品": "",
-            "数量": 1,
-            "售价": 0,
-            "折扣": 100.0,
-            "成本": 0
-        }]),
+        editor_seed,
+        key="items_editor",
         num_rows="dynamic",
         width="stretch",
         hide_index=True,
@@ -1111,6 +1310,8 @@ if menu == "新建报价":
             "成本": st.column_config.NumberColumn("成本", min_value=0, step=100, width="small"),
         }
     )
+
+    st.session_state["editor_df"] = df_input.copy()
 
     valid_df = df_input.copy()
     valid_df["商品"] = valid_df["商品"].fillna("").astype(str)
@@ -1376,52 +1577,86 @@ if menu == "新建报价":
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+    b_reset1, b_reset2 = st.columns([1, 5])
+    with b_reset1:
+        if st.button("🧹 重置表单", use_container_width=True):
+            reset_form_state()
+            st.rerun()
+
     st.markdown("<div style='margin-top:18px;'></div>", unsafe_allow_html=True)
     s1, s2, s3 = st.columns(3)
+
+    current_version = int(st.session_state.get("edit_version", 1) or 1)
+    source_quote_id = st.session_state.get("edit_source_quote_id", "")
+    root_quote_id = st.session_state.get("edit_root_quote_id", "") or quote_id
+    is_revision = "是" if st.session_state.get("edit_mode", False) else "否"
+
+    if not st.session_state.get("edit_mode", False):
+        current_version = 1
+        source_quote_id = ""
+        root_quote_id = quote_id
+
+    def build_history_row(save_status, image_path=""):
+        margin = (net_profit_jpy / grand_total_jpy * 100) if grand_total_jpy else 0
+        payment2_record = p2_total + ship_total_quote if freight_status == "已确认" else p2_total
+        row = {
+            "日期": datetime.date.today(),
+            "客户": client,
+            "单号": quote_id,
+            "状态": save_status,
+            "运费状态": freight_status,
+            "总收入": grand_total_jpy,
+            "总利润": net_profit_jpy,
+            "利润率": round(margin, 2),
+            "版本": current_version,
+            "来源单号": source_quote_id,
+            "根单号": root_quote_id,
+            "是否修订版": is_revision,
+            "商品明细": serialize_items_df(df_input),
+            "汇率": rate,
+            "有效期": valid_time,
+            "服务费%": service_pct,
+            "手续费%": pay_fee_pct,
+            "重量KG": w,
+            "报价运费JPY": u_q,
+            "成本运费JPY": u_c,
+            "额外杂费": other_c,
+            "收款通道": pay_method,
+            "Payment1JPY": payment1_jpy,
+            "Payment2JPY": payment2_record,
+            "商品原价合计": p_rev_original,
+            "商品折后合计": p_rev,
+            "优惠金额": discount_amount,
+            "图片路径": image_path,
+        }
+        return pd.DataFrame([[row.get(col, "") for col in BASE_COLUMNS]], columns=BASE_COLUMNS)
+
+    def finalize_after_save(success_message="已保存"):
+        st.session_state["pending_reset_after_save"] = True
+        st.session_state["pending_success_message"] = success_message
+        st.rerun()
 
     with s1:
         if st.button("💾 保存为报价", use_container_width=True):
             if valid_df.empty:
                 st.error("无法保存：请先录入商品信息")
             else:
-                margin = (net_profit_jpy / grand_total_jpy * 100) if grand_total_jpy else 0
-                new_row = pd.DataFrame([[
-                    datetime.date.today(),
-                    client,
-                    quote_id,
-                    "报价",
-                    freight_status,
-                    grand_total_jpy,
-                    net_profit_jpy,
-                    round(margin, 2)
-                ]], columns=BASE_COLUMNS)
-
                 history = load_history()
+                new_row = build_history_row("报价")
                 history = pd.concat([history, new_row], ignore_index=True)
                 save_history(history)
-                st.success("已保存为报价")
+                finalize_after_save("已保存为报价")
 
     with s2:
         if st.button("✅ 保存为成交", use_container_width=True):
             if valid_df.empty:
                 st.error("无法保存：请先录入商品信息")
             else:
-                margin = (net_profit_jpy / grand_total_jpy * 100) if grand_total_jpy else 0
-                new_row = pd.DataFrame([[
-                    datetime.date.today(),
-                    client,
-                    quote_id,
-                    "成交",
-                    freight_status,
-                    grand_total_jpy,
-                    net_profit_jpy,
-                    round(margin, 2)
-                ]], columns=BASE_COLUMNS)
-
                 history = load_history()
+                new_row = build_history_row("成交")
                 history = pd.concat([history, new_row], ignore_index=True)
                 save_history(history)
-                st.success("已保存为成交")
+                finalize_after_save("已保存为成交")
 
     with s3:
         if st.button("🖼️ 导出报价图片", use_container_width=True):
@@ -1478,8 +1713,36 @@ elif menu == "历史订单":
         show_df["总收入"] = clean_number_series(show_df["总收入"]).fillna(0).map(safe_format_jpy)
         show_df["总利润"] = clean_number_series(show_df["总利润"]).fillna(0).map(safe_format_jpy)
         show_df["利润率"] = clean_number_series(show_df["利润率"]).fillna(0).map(lambda x: f"{float(x):.2f}%")
+        show_df["版本"] = clean_number_series(show_df["版本"]).fillna(1).astype(int)
+        show_df["是否修订版"] = show_df["是否修订版"].replace({"True": "是", "False": "否"}).fillna("否")
+        show_columns = ["日期", "客户", "单号", "版本", "是否修订版", "来源单号", "状态", "运费状态", "总收入", "总利润", "利润率"]
+        st.dataframe(show_df[show_columns], use_container_width=True, hide_index=True)
 
-        st.dataframe(show_df, use_container_width=True, hide_index=True)
+        st.markdown("### 回档修改 / 生成新版本")
+        revise_df = history.copy()
+        revise_df["版本"] = clean_number_series(revise_df["版本"]).fillna(1).astype(int)
+        revise_df["展示"] = (
+            revise_df["日期"].astype(str) + " | "
+            + revise_df["客户"].astype(str) + " | "
+            + "V" + revise_df["版本"].astype(str) + " | "
+            + revise_df["单号"].astype(str) + " | "
+            + revise_df["状态"].astype(str)
+        )
+
+        selected_revision = st.selectbox("选择要回档修改的记录", revise_df["展示"].tolist())
+        col_a, col_b = st.columns([1, 1])
+
+        with col_a:
+            if st.button("📝 载入并生成新版本", use_container_width=True):
+                selected_row = revise_df[revise_df["展示"] == selected_revision].iloc[0].to_dict()
+                load_record_into_form(selected_row)
+                st.session_state["menu"] = "新建报价"
+                st.rerun()
+
+        with col_b:
+            if st.button("♻️ 清空当前编辑状态", use_container_width=True):
+                reset_form_state()
+                st.success("已清空当前编辑状态，返回普通新建模式。")
 
         st.markdown("### 报价转成交")
         quote_df = history[history["状态"].astype(str) == "报价"].copy()
@@ -1487,9 +1750,11 @@ elif menu == "历史订单":
         if quote_df.empty:
             st.caption("当前没有可转换的报价记录。")
         else:
+            quote_df["版本"] = clean_number_series(quote_df["版本"]).fillna(1).astype(int)
             quote_df["展示"] = (
                 quote_df["日期"].astype(str) + " | "
-                + quote_df["客户"].astype(str) + " | "
+                + quote_df["客户"].astype(str) + " | V"
+                + quote_df["版本"].astype(str) + " | "
                 + quote_df["单号"].astype(str) + " | "
                 + quote_df["状态"].astype(str)
             )
@@ -1504,13 +1769,15 @@ elif menu == "历史订单":
 
         st.markdown("### 删除订单记录")
         delete_df = history.copy()
-
+        delete_df["版本"] = clean_number_series(delete_df["版本"]).fillna(1).astype(int)
         delete_df["总收入_清洗"] = clean_number_series(delete_df["总收入"]).fillna(0)
 
         delete_df["展示"] = (
             delete_df["日期"].astype(str)
             + " | "
             + delete_df["客户"].astype(str)
+            + " | V"
+            + delete_df["版本"].astype(str)
             + " | "
             + delete_df["单号"].astype(str)
             + " | "

@@ -1147,7 +1147,7 @@ p_rev = max(0, p_rev_after_item_discount - manual_discount)
 
 discount_amount = p_rev_original - p_rev
 
-    p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0
+p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0
 
     payment1_jpy = p_rev
     disp_service_fee = int(p_rev * (service_pct / 100))

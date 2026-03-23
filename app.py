@@ -1162,7 +1162,7 @@ discount_amount = p_rev_original - p_rev
 manual_minus_amount = int(abs(valid_df.loc[valid_df["项折后"] < 0, "项折后"].sum())) if not valid_df.empty else 0
 total_reduce_amount = discount_amount + manual_minus_amount
 
-    p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0
+p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0
 
     payment1_jpy = p_rev
     disp_service_fee = int(p_rev * (service_pct / 100))

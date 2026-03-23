@@ -1090,7 +1090,9 @@ if menu == "新建报价":
     ship_total_quote = int(w * u_q)
     ship_total_cost = int(w * u_c)
 
-    st.info("💡 可在【折扣】列为不同商品单独设置折扣，100 即为不打折。按 Tab 键可更快录入。")
+st.info("💡 可在【折扣】列为不同商品单独设置折扣，100 即为不打折。按 Tab 键可更快录入。")
+
+manual_discount = st.number_input("优惠金额 (JPY)", min_value=0, value=0, step=100)
 
 # ===== 修复商品录入乱跳：表格数据放进 session_state 持久保存 =====
 if "quote_items_df" not in st.session_state:
@@ -1121,26 +1123,29 @@ df_input = st.data_editor(
 # 每次编辑后回写，避免 rerun 时丢失
 st.session_state.quote_items_df = df_input.copy()
 
-    valid_df = df_input.copy()
-    valid_df["商品"] = valid_df["商品"].fillna("").astype(str)
-    valid_df = valid_df[valid_df["商品"].str.strip() != ""].copy()
+valid_df = df_input.copy()
+valid_df["商品"] = valid_df["商品"].fillna("").astype(str)
+valid_df = valid_df[valid_df["商品"].str.strip() != ""].copy()
 
-    if not valid_df.empty:
-        valid_df["数量"] = pd.to_numeric(valid_df["数量"], errors="coerce").fillna(0).astype(int).clip(lower=0)
-        valid_df["售价"] = pd.to_numeric(valid_df["售价"], errors="coerce").fillna(0).astype(float).clip(lower=0)
-        valid_df["折扣"] = pd.to_numeric(valid_df["折扣"], errors="coerce").fillna(100.0).astype(float).clip(lower=0, upper=100)
-        valid_df["成本"] = pd.to_numeric(valid_df["成本"], errors="coerce").fillna(0).astype(float).clip(lower=0)
+if not valid_df.empty:
+    valid_df["数量"] = pd.to_numeric(valid_df["数量"], errors="coerce").fillna(0).astype(int).clip(lower=0)
+    valid_df["售价"] = pd.to_numeric(valid_df["售价"], errors="coerce").fillna(0).astype(float).clip(lower=0)
+    valid_df["折扣"] = pd.to_numeric(valid_df["折扣"], errors="coerce").fillna(100.0).astype(float).clip(lower=0, upper=100)
+    valid_df["成本"] = pd.to_numeric(valid_df["成本"], errors="coerce").fillna(0).astype(float).clip(lower=0)
 
-        valid_df["项原价"] = valid_df["数量"] * valid_df["售价"]
-        valid_df["项折后"] = valid_df["项原价"] * (valid_df["折扣"] / 100.0)
+    valid_df["项原价"] = valid_df["数量"] * valid_df["售价"]
+    valid_df["项折后"] = valid_df["项原价"] * (valid_df["折扣"] / 100.0)
 
     p_rev_original = int(valid_df["项原价"].sum())
     p_rev_after_item_discount = int(valid_df["项折后"].sum())
+else:
+    p_rev_original = 0
+    p_rev_after_item_discount = 0
 
-    manual_discount = int(manual_discount)
-    p_rev = max(0, p_rev_after_item_discount - manual_discount)
+manual_discount = int(manual_discount)
+p_rev = max(0, p_rev_after_item_discount - manual_discount)
 
-    discount_amount = p_rev_original - p_rev
+discount_amount = p_rev_original - p_rev
 
     p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0
 

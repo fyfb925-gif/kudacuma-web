@@ -1161,7 +1161,7 @@ else:
 
 grand_total_rmb = round(grand_total_jpy * rate, 2)
 
-    with st.sidebar:
+with st.sidebar:
         loss_gap = int(grand_total_jpy * 0.02) if grand_total_jpy > 0 else 0
         net_profit_jpy = (
             (p_rev - p_cost)

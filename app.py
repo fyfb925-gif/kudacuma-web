@@ -1049,32 +1049,34 @@
     </style>
     """, unsafe_allow_html=True)
     
-    # --- 3. 菜单 ---
-    with st.sidebar:
+# --- 3. 菜单 ---
+with st.sidebar:
     st.title("🐻 KDKM V11.8")
     menu = st.radio("导航", ["新建报价", "历史订单", "运营分析", "系统设置"])
-    
-    
-    # --- 4. 新建报价 ---
-    if menu == "新建报价":
+
+
+# --- 4. 新建报价 ---
+if menu == "新建报价":
+
     with st.container(border=True):
         c1, c2, c3, c4 = st.columns(4)
         client = c1.text_input("客户姓名", "新客户")
         rate = c2.number_input("结算汇率", value=0.0450, format="%.4f")
         valid_time = c3.selectbox("有效期", ["48 Hours", "24 Hours", "3 Days"])
         quote_id = c4.text_input("单号", f"KDKM-{datetime.datetime.now().strftime('%m%d%H%M')}")
-    
+
         d1, d2, d3, d4 = st.columns(4)
         service_pct = d1.number_input("服务费 %", value=10.0, step=0.5)
         pay_fee_pct = d2.number_input("手续费 %", value=3.0, step=0.1)
         freight_status = d3.selectbox("运费状态", ["已确认", "待确认"])
-    
+
         qr_list = [f.replace(".png", "") for f in os.listdir(QR_DIR) if f.endswith(".png")]
         pay_method = d4.selectbox("收款通道", ["微信支付"] + qr_list)
-    
+
     st.markdown('<div class="control-title">📦 商品录入与成本控制</div>', unsafe_allow_html=True)
+
     f1, f2, f3, f4 = st.columns(4)
-    
+
     if freight_status == "已确认":
         w = f1.number_input("重量 (KG)", min_value=0.0, value=1.0, step=0.1)
         u_q = f2.number_input("报价运费 (JPY)", min_value=0, value=2200, step=1)
@@ -1083,82 +1085,70 @@
         w = f1.number_input("重量 (KG)", min_value=0.0, value=0.0, step=0.1)
         u_q = f2.number_input("报价运费 (JPY)", min_value=0, value=0, step=1)
         u_c = f3.number_input("成本运费 (JPY)", min_value=0, value=0, step=1)
-    
+
     other_c = f4.number_input("额外杂费", min_value=0, value=0, step=100)
-    manual_discount = st.number_input("优惠金额 (JPY)", min_value=0, value=0, step=100)
-    
+
     ship_total_quote = int(w * u_q)
     ship_total_cost = int(w * u_c)
-    
-    st.info("💡 可在【折扣】列为不同商品单独设置折扣，100 即为不打折。按 Tab 键可更快录入。")
-    
+
+    st.info("💡 可在【折扣】列为不同商品单独设置折扣")
+
     manual_discount = st.number_input("优惠金额 (JPY)", min_value=0, value=0, step=100)
-    
-    # ===== 修复商品录入乱跳：表格数据放进 session_state 持久保存 =====
+
+    # ===== 表格稳定版本 =====
     if "quote_items_df" not in st.session_state:
-    st.session_state.quote_items_df = pd.DataFrame([{
-        "商品": "",
-        "数量": 1,
-        "售价": 0,
-        "折扣": 100.0,
-        "成本": 0
-    }])
-    
+        st.session_state.quote_items_df = pd.DataFrame([{
+            "商品": "",
+            "数量": 1,
+            "售价": 0,
+            "折扣": 100.0,
+            "成本": 0
+        }])
+
     df_input = st.data_editor(
-    st.session_state.quote_items_df,
-    key="quote_items_editor",
-    num_rows="dynamic",
-    width="stretch",
-    hide_index=True,
-    row_height=38,
-    column_config={
-        "商品": st.column_config.TextColumn("商品", width="large", required=False),
-        "数量": st.column_config.NumberColumn("数量", min_value=0, step=1, width="small"),
-        "售价": st.column_config.NumberColumn("售价", step=100, width="small"),
-        "折扣": st.column_config.NumberColumn("折扣", min_value=0.0, max_value=100.0, step=1.0, width="small"),
-        "成本": st.column_config.NumberColumn("成本", step=100, width="small"),
-    }
+        st.session_state.quote_items_df,
+        key="quote_items_editor",
+        num_rows="dynamic",
+        width="stretch",
+        hide_index=True
     )
-    
-    # 每次编辑后回写，避免 rerun 时丢失
+
     st.session_state.quote_items_df = df_input.copy()
-    
+
     valid_df = df_input.copy()
     valid_df["商品"] = valid_df["商品"].fillna("").astype(str)
     valid_df = valid_df[valid_df["商品"].str.strip() != ""].copy()
-    
+
     if not valid_df.empty:
-    valid_df["数量"] = pd.to_numeric(valid_df["数量"], errors="coerce").fillna(0).astype(int).clip(lower=0)
-    valid_df["售价"] = pd.to_numeric(valid_df["售价"], errors="coerce").fillna(0).astype(float).clip(lower=0)
-    valid_df["折扣"] = pd.to_numeric(valid_df["折扣"], errors="coerce").fillna(100.0).astype(float).clip(lower=0, upper=100)
-    valid_df["成本"] = pd.to_numeric(valid_df["成本"], errors="coerce").fillna(0).astype(float).clip(lower=0)
-    
-    valid_df["项原价"] = valid_df["数量"] * valid_df["售价"]
-    valid_df["项折后"] = valid_df["项原价"] * (valid_df["折扣"] / 100.0)
-    
-    p_rev_original = int(valid_df["项原价"].sum())
-    p_rev_after_item_discount = int(valid_df["项折后"].sum())
+        valid_df["数量"] = pd.to_numeric(valid_df["数量"], errors="coerce").fillna(0)
+        valid_df["售价"] = pd.to_numeric(valid_df["售价"], errors="coerce").fillna(0)
+        valid_df["折扣"] = pd.to_numeric(valid_df["折扣"], errors="coerce").fillna(100)
+        valid_df["成本"] = pd.to_numeric(valid_df["成本"], errors="coerce").fillna(0)
+
+        valid_df["项原价"] = valid_df["数量"] * valid_df["售价"]
+        valid_df["项折后"] = valid_df["项原价"] * (valid_df["折扣"] / 100)
+
+        p_rev_original = int(valid_df["项原价"].sum())
+        p_rev_after_item_discount = int(valid_df["项折后"].sum())
     else:
-    p_rev_original = 0
-    p_rev_after_item_discount = 0
-    
-    manual_discount = int(manual_discount)
-    p_rev = max(0, p_rev_after_item_discount - manual_discount)
-    
+        p_rev_original = 0
+        p_rev_after_item_discount = 0
+
+    p_rev = max(0, p_rev_after_item_discount - int(manual_discount))
     discount_amount = p_rev_original - p_rev
-    
+
     p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0
-    
+
     payment1_jpy = p_rev
     disp_service_fee = int(p_rev * (service_pct / 100))
     disp_pay_fee = int((p_rev + disp_service_fee) * (pay_fee_pct / 100))
     p2_total = disp_service_fee + disp_pay_fee
-    
+
     if freight_status == "已确认":
-    grand_total_jpy = p_rev + p2_total + ship_total_quote
+        grand_total_jpy = p_rev + p2_total + ship_total_quote
     else:
-    grand_total_jpy = p_rev + p2_total
-    
+        grand_total_jpy = p_rev + p2_total
+
     grand_total_rmb = round(grand_total_jpy * rate, 2)
     
     with st.sidebar:

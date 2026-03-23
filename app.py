@@ -1089,41 +1089,59 @@ if menu == "新建报价":
     ship_total_quote = int(w * u_q)
     ship_total_cost = int(w * u_c)
 
-    st.info("💡 可在【折扣】列为不同商品单独设置折扣，100 即为不打折。按 Tab 键可更快录入。")
+    st.info("💡 可在【折扣】列为不同商品单独设置折扣，100 即为不打折。")
 
-    df_input = st.data_editor(
-        pd.DataFrame([{
-            "商品": "",
-            "数量": 1,
-            "售价": 0,
-            "折扣": 100.0,
-            "成本": 0
-        }]),
-        num_rows="dynamic",
-        width="stretch",
-        hide_index=True,
-        row_height=38,
-        column_config={
-            "商品": st.column_config.TextColumn("商品", width="large", required=True),
-            "数量": st.column_config.NumberColumn("数量", min_value=0, step=1, width="small"),
-            "售价": st.column_config.NumberColumn("售价", min_value=0, step=100, width="small"),
-            "折扣": st.column_config.NumberColumn("折扣", min_value=0.0, max_value=100.0, step=1.0, width="small"),
-            "成本": st.column_config.NumberColumn("成本", min_value=0, step=100, width="small"),
-        }
-    )
+st.info("💡 可在【折扣】列为不同商品单独设置折扣，100 即为不打折。按 Tab 键可更快录入。")
 
-    valid_df = df_input.copy()
-    valid_df["商品"] = valid_df["商品"].fillna("").astype(str)
-    valid_df = valid_df[valid_df["商品"].str.strip() != ""].copy()
+# ========= 关键修复：商品表格使用 session_state 持久化，避免输入时跳动/丢值 =========
+DEFAULT_ITEM_ROWS = pd.DataFrame([{
+    "商品": "",
+    "数量": 1,
+    "售价": 0,
+    "折扣": 100.0,
+    "成本": 0
+}])
 
-    if not valid_df.empty:
-        valid_df["数量"] = pd.to_numeric(valid_df["数量"], errors="coerce").fillna(0).astype(int).clip(lower=0)
-        valid_df["售价"] = pd.to_numeric(valid_df["售价"], errors="coerce").fillna(0).astype(float).clip(lower=0)
-        valid_df["折扣"] = pd.to_numeric(valid_df["折扣"], errors="coerce").fillna(100.0).astype(float).clip(lower=0, upper=100)
-        valid_df["成本"] = pd.to_numeric(valid_df["成本"], errors="coerce").fillna(0).astype(float).clip(lower=0)
+if "quote_items_df" not in st.session_state:
+    st.session_state["quote_items_df"] = DEFAULT_ITEM_ROWS.copy()
 
-        valid_df["项原价"] = valid_df["数量"] * valid_df["售价"]
-        valid_df["项折后"] = valid_df["项原价"] * (valid_df["折扣"] / 100.0)
+# 只在第一次没有 editor key 时初始化
+if "quote_items_editor" not in st.session_state:
+    st.session_state["quote_items_editor"] = st.session_state["quote_items_df"].to_dict("records")
+
+df_input = st.data_editor(
+    st.session_state["quote_items_df"],
+    key="quote_items_editor",
+    num_rows="dynamic",
+    width="stretch",
+    hide_index=True,
+    row_height=38,
+    column_config={
+        "商品": st.column_config.TextColumn("商品", width="large", required=False),
+        "数量": st.column_config.NumberColumn("数量", min_value=0, step=1, width="small", format="%d"),
+        "售价": st.column_config.NumberColumn("售价", min_value=0, step=1, width="small", format="%d"),
+        "折扣": st.column_config.NumberColumn("折扣", min_value=0.0, max_value=100.0, step=1.0, width="small", format="%.1f"),
+        "成本": st.column_config.NumberColumn("成本", min_value=0, step=1, width="small", format="%d"),
+    }
+)
+
+# 将编辑后的内容写回 session_state，确保下次 rerun 不会重置
+st.session_state["quote_items_df"] = df_input.copy()
+
+valid_df = st.session_state["quote_items_df"].copy()
+valid_df["商品"] = valid_df["商品"].fillna("").astype(str)
+valid_df = valid_df[valid_df["商品"].str.strip() != ""].copy()
+
+if not valid_df.empty:
+    valid_df["数量"] = pd.to_numeric(valid_df["数量"], errors="coerce").fillna(0).clip(lower=0).astype(int)
+    valid_df["售价"] = pd.to_numeric(valid_df["售价"], errors="coerce").fillna(0).clip(lower=0)
+    valid_df["折扣"] = pd.to_numeric(valid_df["折扣"], errors="coerce").fillna(100.0).clip(lower=0, upper=100)
+    valid_df["成本"] = pd.to_numeric(valid_df["成本"], errors="coerce").fillna(0).clip(lower=0)
+
+    valid_df["项原价"] = valid_df["数量"] * valid_df["售价"]
+    valid_df["项折后"] = valid_df["项原价"] * (valid_df["折扣"] / 100.0)
+else:
+    valid_df = pd.DataFrame(columns=["商品", "数量", "售价", "折扣", "成本", "项原价", "项折后"])
 
     p_rev_original = int(valid_df["项原价"].sum()) if not valid_df.empty else 0
     p_rev = int(valid_df["项折后"].sum()) if not valid_df.empty else 0

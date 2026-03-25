@@ -1065,7 +1065,7 @@ if menu == "新建报价":
         quote_id = c4.text_input("单号", f"KDKM-{datetime.datetime.now().strftime('%m%d%H%M')}")
 
         d1, d2, d3, d4 = st.columns(4)
-        service_pct = d1.number_input("服务费 %", value=10.0, step=0.5)
+        service_pct = d1.number_input("服务费 %", value=7.0, step=0.5)
         pay_fee_pct = d2.number_input("手续费 %", value=3.0, step=0.1)
         freight_status = d3.selectbox("运费状态", ["已确认", "待确认"])
 

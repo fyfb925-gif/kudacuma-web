@@ -4,6 +4,7 @@ import datetime
 import os
 import html
 import shutil
+import json
 from pathlib import Path
 
 import gspread
@@ -16,6 +17,7 @@ st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V11.8", layout="wide
 DB_FILE = "kudacuma_history.csv"
 QR_DIR = "qr_codes"
 EXPORT_DIR = "exports"
+ORDER_DETAIL_DIR = "order_details"
 
 # Google Sheets 配置
 SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"
@@ -30,6 +32,9 @@ if not os.path.exists(QR_DIR):
 
 if not os.path.exists(EXPORT_DIR):
     os.makedirs(EXPORT_DIR)
+
+if not os.path.exists(ORDER_DETAIL_DIR):
+    os.makedirs(ORDER_DETAIL_DIR)
 
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=BASE_COLUMNS).to_csv(
@@ -153,6 +158,138 @@ def detect_browser_executable():
             return path
     return None
 
+def default_order_form():
+    return {
+        "form_client": "新客户",
+        "form_rate": 0.0450,
+        "form_valid_time": "48 Hours",
+        "form_quote_id": f"KDKM-{datetime.datetime.now().strftime('%m%d%H%M')}",
+        "form_service_pct": 7.0,
+        "form_pay_fee_pct": 3.0,
+        "form_freight_status": "已确认",
+        "form_pay_method": "微信支付",
+        "form_weight": 1.0,
+        "form_quote_freight": 2200,
+        "form_cost_freight": 1400,
+        "form_other_cost": 0,
+        "form_manual_discount": 0,
+        "form_items": [{
+            "商品": "",
+            "数量": 1,
+            "售价": 0,
+            "折扣": 100.0,
+            "成本": 0
+        }]
+    }
+
+
+def init_order_form_state():
+    defaults = default_order_form()
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+
+def get_detail_file_path(order_id: str) -> str:
+    safe_id = str(order_id).replace("/", "_").replace("\\", "_").strip()
+    return os.path.join(ORDER_DETAIL_DIR, f"{safe_id}.json")
+
+
+def save_order_detail(detail: dict):
+    order_id = detail.get("quote_id", "").strip()
+    if not order_id:
+        return
+    path = get_detail_file_path(order_id)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(detail, f, ensure_ascii=False, indent=2)
+
+
+def load_order_detail(order_id: str):
+    path = get_detail_file_path(order_id)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def apply_order_detail_to_form(detail: dict):
+    init_order_form_state()
+
+    st.session_state["form_client"] = detail.get("client", "新客户")
+    st.session_state["form_rate"] = float(detail.get("rate", 0.0450))
+    st.session_state["form_valid_time"] = detail.get("valid_time", "48 Hours")
+    st.session_state["form_quote_id"] = detail.get("quote_id", f"KDKM-{datetime.datetime.now().strftime('%m%d%H%M')}")
+    st.session_state["form_service_pct"] = float(detail.get("service_pct", 7.0))
+    st.session_state["form_pay_fee_pct"] = float(detail.get("pay_fee_pct", 3.0))
+    st.session_state["form_freight_status"] = detail.get("freight_status", "已确认")
+    st.session_state["form_pay_method"] = detail.get("pay_method", "微信支付")
+    st.session_state["form_weight"] = float(detail.get("weight", 0.0))
+    st.session_state["form_quote_freight"] = int(detail.get("quote_freight_unit", 0))
+    st.session_state["form_cost_freight"] = int(detail.get("cost_freight_unit", 0))
+    st.session_state["form_other_cost"] = int(detail.get("other_cost", 0))
+    st.session_state["form_manual_discount"] = int(detail.get("manual_discount", 0))
+
+    items = detail.get("items", [])
+    if not items:
+        items = default_order_form()["form_items"]
+    st.session_state["form_items"] = items
+
+
+def build_order_detail_payload(
+    client,
+    rate,
+    valid_time,
+    quote_id,
+    service_pct,
+    pay_fee_pct,
+    freight_status,
+    pay_method,
+    w,
+    u_q,
+    u_c,
+    other_c,
+    manual_discount,
+    valid_df,
+    status,
+    grand_total_jpy,
+    net_profit_jpy,
+    margin
+):
+    items = []
+    if not valid_df.empty:
+        save_cols = ["商品", "数量", "售价", "折扣", "成本"]
+        temp_df = valid_df[save_cols].copy()
+        temp_df["数量"] = temp_df["数量"].astype(int)
+        temp_df["售价"] = temp_df["售价"].astype(float)
+        temp_df["折扣"] = temp_df["折扣"].astype(float)
+        temp_df["成本"] = temp_df["成本"].astype(float)
+        items = temp_df.to_dict(orient="records")
+
+    return {
+        "saved_at": datetime.datetime.now().isoformat(),
+        "date": str(datetime.date.today()),
+        "client": client,
+        "quote_id": quote_id,
+        "status": status,
+        "rate": float(rate),
+        "valid_time": valid_time,
+        "service_pct": float(service_pct),
+        "pay_fee_pct": float(pay_fee_pct),
+        "freight_status": freight_status,
+        "pay_method": pay_method,
+        "weight": float(w),
+        "quote_freight_unit": int(u_q),
+        "cost_freight_unit": int(u_c),
+        "other_cost": int(other_c),
+        "manual_discount": int(manual_discount),
+        "grand_total_jpy": int(grand_total_jpy),
+        "net_profit_jpy": int(net_profit_jpy),
+        "margin": float(round(margin, 2)),
+        "items": items
+    }
 
 # --- Google Sheets 工具函数 ---
 @st.cache_resource
@@ -317,6 +454,7 @@ def build_quote_export_html(
     p_rev_original,
     p_rev,
     discount_amount,
+    manual_discount_applied,
     service_pct,
     disp_service_fee,
     pay_fee_pct,
@@ -338,7 +476,13 @@ def build_quote_export_html(
     if discount_amount > 0:
         summary_html += (
             f"<div class='summary-row strong'><span>折后金额合计</span><span>¥ {p_rev:,}</span></div>"
-            f"<div class='summary-row discount'><span>优惠折扣总计</span><span>-¥ {discount_amount:,}</span></div>"
+            f"<div class='summary-row discount'><span>商品折扣总计</span><span>-¥ {discount_amount:,}</span></div>"
+        )
+
+    if manual_discount_applied > 0:
+        summary_html += (
+            f"<div class='summary-row discount'><span>优惠减免</span><span>-¥ {manual_discount_applied:,}</span></div>"
+            f"<div class='summary-row strong'><span>第一笔应收小计</span><span>¥ {payment1_jpy:,}</span></div>"
         )
 
     if freight_status == "已确认":
@@ -729,6 +873,7 @@ def export_quote_png(
     p_rev_original,
     p_rev,
     discount_amount,
+    manual_discount_applied,
     service_pct,
     disp_service_fee,
     pay_fee_pct,
@@ -767,6 +912,7 @@ def export_quote_png(
         grand_total_jpy=grand_total_jpy,
         grand_total_rmb=grand_total_rmb,
         qr_abs_path=qr_abs_path,
+        manual_discount_applied=manual_discount_applied,
     )
 
     file_name = f"{quote_id}.png"
@@ -1052,39 +1198,77 @@ div[data-testid="stDataEditor"] textarea {
 # --- 3. 菜单 ---
 with st.sidebar:
     st.title("🐻 KDKM V11.8")
-    menu = st.radio("导航", ["新建报价", "历史订单", "运营分析", "系统设置"])
+    if "menu_main" not in st.session_state:
+        st.session_state["menu_main"] = "新建报价"
+    menu = st.radio("导航", ["新建报价", "历史订单", "运营分析", "系统设置"], key="menu_main")
 
 
 # --- 4. 新建报价 ---
 if menu == "新建报价":
-    with st.container(border=True):
-        c1, c2, c3, c4 = st.columns(4)
-        client = c1.text_input("客户姓名", "新客户")
-        rate = c2.number_input("结算汇率", value=0.0450, format="%.4f")
-        valid_time = c3.selectbox("有效期", ["48 Hours", "24 Hours", "3 Days"])
-        quote_id = c4.text_input("单号", f"KDKM-{datetime.datetime.now().strftime('%m%d%H%M')}")
+    init_order_form_state()
+with st.container(border=True):
+    qr_list = [f.replace(".png", "") for f in os.listdir(QR_DIR) if f.endswith(".png")]
+    pay_method_options = ["微信支付"] + [x for x in qr_list if x != "微信支付"]
 
-        d1, d2, d3, d4 = st.columns(4)
-        service_pct = d1.number_input("服务费 %", value=7.0, step=0.5)
-        pay_fee_pct = d2.number_input("手续费 %", value=3.0, step=0.1)
-        freight_status = d3.selectbox("运费状态", ["已确认", "待确认"])
+    if st.session_state["form_pay_method"] not in pay_method_options:
+        st.session_state["form_pay_method"] = "微信支付"
 
-        qr_list = [f.replace(".png", "") for f in os.listdir(QR_DIR) if f.endswith(".png")]
-        pay_method = d4.selectbox("收款通道", ["微信支付"] + qr_list)
+    valid_time_options = ["48 Hours", "24 Hours", "3 Days"]
+    if st.session_state["form_valid_time"] not in valid_time_options:
+        st.session_state["form_valid_time"] = "48 Hours"
 
-    st.markdown('<div class="control-title">📦 商品录入与成本控制</div>', unsafe_allow_html=True)
-    f1, f2, f3, f4 = st.columns(4)
+    freight_options = ["已确认", "待确认"]
+    if st.session_state["form_freight_status"] not in freight_options:
+        st.session_state["form_freight_status"] = "已确认"
 
-    if freight_status == "已确认":
-        w = f1.number_input("重量 (KG)", min_value=0.0, value=1.0, step=0.1)
-        u_q = f2.number_input("报价运费 (JPY)", min_value=0, value=2200, step=1)
-        u_c = f3.number_input("成本运费 (JPY)", min_value=0, value=1400, step=1)
-    else:
-        w = f1.number_input("重量 (KG)", min_value=0.0, value=0.0, step=0.1)
-        u_q = f2.number_input("报价运费 (JPY)", min_value=0, value=0, step=1)
-        u_c = f3.number_input("成本运费 (JPY)", min_value=0, value=0, step=1)
+    c1, c2, c3, c4 = st.columns(4)
+    client = c1.text_input("客户姓名", key="form_client")
+    rate = c2.number_input("结算汇率", min_value=0.0001, value=float(st.session_state["form_rate"]), format="%.4f", key="form_rate")
+    valid_time = c3.selectbox(
+        "有效期",
+        valid_time_options,
+        index=valid_time_options.index(st.session_state["form_valid_time"]),
+        key="form_valid_time"
+    )
+    quote_id = c4.text_input("单号", key="form_quote_id")
 
-    other_c = f4.number_input("额外杂费", min_value=0, value=0, step=100)
+    d1, d2, d3, d4 = st.columns(4)
+    service_pct = d1.number_input("服务费 %", min_value=0.0, value=float(st.session_state["form_service_pct"]), step=0.5, key="form_service_pct")
+    pay_fee_pct = d2.number_input("手续费 %", min_value=0.0, value=float(st.session_state["form_pay_fee_pct"]), step=0.1, key="form_pay_fee_pct")
+    freight_status = d3.selectbox(
+        "运费状态",
+        freight_options,
+        index=freight_options.index(st.session_state["form_freight_status"]),
+        key="form_freight_status"
+    )
+    pay_method = d4.selectbox(
+        "收款通道",
+        pay_method_options,
+        index=pay_method_options.index(st.session_state["form_pay_method"]),
+        key="form_pay_method"
+    )
+
+st.markdown('<div class="control-title">📦 商品录入与成本控制</div>', unsafe_allow_html=True)
+f1, f2, f3, f4, f5 = st.columns(5)
+
+if freight_status == "已确认":
+    if st.session_state["form_weight"] <= 0:
+        st.session_state["form_weight"] = 1.0
+    if st.session_state["form_quote_freight"] < 0:
+        st.session_state["form_quote_freight"] = 2200
+    if st.session_state["form_cost_freight"] < 0:
+        st.session_state["form_cost_freight"] = 1400
+
+    w = f1.number_input("重量 (KG)", min_value=0.0, step=0.1, value=float(st.session_state["form_weight"]), key="form_weight")
+    u_q = f2.number_input("报价运费 (JPY)", min_value=0, step=1, value=int(st.session_state["form_quote_freight"]), key="form_quote_freight")
+    u_c = f3.number_input("成本运费 (JPY)", min_value=0, step=1, value=int(st.session_state["form_cost_freight"]), key="form_cost_freight")
+else:
+    w = f1.number_input("重量 (KG)", min_value=0.0, step=0.1, value=float(st.session_state["form_weight"]), key="form_weight")
+    u_q = f2.number_input("报价运费 (JPY)", min_value=0, step=1, value=int(st.session_state["form_quote_freight"]), key="form_quote_freight")
+    u_c = f3.number_input("成本运费 (JPY)", min_value=0, step=1, value=int(st.session_state["form_cost_freight"]), key="form_cost_freight")
+
+other_c = f4.number_input("额外杂费", min_value=0, step=100, value=int(st.session_state["form_other_cost"]), key="form_other_cost")
+manual_discount = f5.number_input("优惠减免", min_value=0, step=100, value=int(st.session_state["form_manual_discount"]), key="form_manual_discount")
 
     ship_total_quote = int(w * u_q)
     ship_total_cost = int(w * u_c)
@@ -1128,9 +1312,9 @@ if menu == "新建报价":
     p_rev_original = int(valid_df["项原价"].sum()) if not valid_df.empty else 0
     p_rev = int(valid_df["项折后"].sum()) if not valid_df.empty else 0
     discount_amount = p_rev_original - p_rev
-
+    
     p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0
-
+    
     payment1_jpy = p_rev
     disp_service_fee = int(p_rev * (service_pct / 100))
     disp_pay_fee = int((p_rev + disp_service_fee) * (pay_fee_pct / 100))
@@ -1145,20 +1329,21 @@ if menu == "新建报价":
 
     with st.sidebar:
         loss_gap = int(grand_total_jpy * 0.02) if grand_total_jpy > 0 else 0
-        net_profit_jpy = (
-            (p_rev - p_cost)
-            + (ship_total_quote - ship_total_cost)
-            + disp_service_fee
-            + disp_pay_fee
-            - loss_gap
-            - other_c
-        )
+    net_profit_jpy = (
+        (payment1_jpy - p_cost)
+        + (ship_total_quote - ship_total_cost)
+        + disp_service_fee
+        + disp_pay_fee
+        - loss_gap
+        - other_c
+    )
         net_profit_rmb = round(net_profit_jpy * rate, 2)
 
         st.markdown(f"""
             <div class="profit-panel">
                 <div style="font-weight:600; margin-bottom:12px; border-bottom:1px solid #3d4256; padding-bottom:5px;">📊 收益透视图</div>
-                <div class="profit-row"><span>商品利</span><span>+¥{p_rev - p_cost:,}</span></div>
+                <div class="profit-row"><span>商品利</span><span>+¥{payment1_jpy - p_cost:,}</span></div>
+                <div class="profit-row" style="color:#f39c12;"><span>优惠减免</span><span>-¥{manual_discount_applied:,}</span></div>
                 <div class="profit-row"><span>代购费</span><span>+¥{disp_service_fee:,}</span></div>
                 <div class="profit-row"><span>运费差</span><span>+¥{ship_total_quote - ship_total_cost:,}</span></div>
                 <div class="profit-row"><span>通道差</span><span>+¥{disp_pay_fee:,}</span></div>
@@ -1243,15 +1428,25 @@ if menu == "新建报价":
                 "</div>"
             )
 
-            if discount_amount > 0:
-                summary_html += (
-                    f"<div class='summary-row strong'>"
-                    f"<span>折后金额合计</span><span>¥ {p_rev:,}</span>"
-                    "</div>"
-                    f"<div class='summary-row discount'>"
-                    f"<span class='discount-text'>优惠折扣总计</span><span class='discount-text'>-¥ {discount_amount:,}</span>"
-                    "</div>"
-                )
+           if discount_amount > 0:
+            summary_html += (
+                f"<div class='summary-row strong'>"
+                f"<span>折后金额合计</span><span>¥ {p_rev:,}</span>"
+                "</div>"
+                f"<div class='summary-row discount'>"
+                f"<span class='discount-text'>商品折扣总计</span><span class='discount-text'>-¥ {discount_amount:,}</span>"
+                "</div>"
+            )
+        
+        if manual_discount_applied > 0:
+            summary_html += (
+                f"<div class='summary-row discount'>"
+                f"<span class='discount-text'>优惠减免</span><span class='discount-text'>-¥ {manual_discount_applied:,}</span>"
+                "</div>"
+                f"<div class='summary-row strong'>"
+                f"<span>第一笔应收小计</span><span>¥ {payment1_jpy:,}</span>"
+                "</div>"
+            )
         else:
             items_html = "<div style='color:#bbb; padding:12px 0; font-size:0.92rem;'>等待录入...</div>"
 
@@ -1437,6 +1632,7 @@ if menu == "新建报价":
                     p_rev_original=p_rev_original,
                     p_rev=p_rev,
                     discount_amount=discount_amount,
+                    manual_discount_applied=manual_discount_applied,
                     service_pct=service_pct,
                     disp_service_fee=disp_service_fee,
                     pay_fee_pct=pay_fee_pct,

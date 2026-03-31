@@ -17,7 +17,6 @@ st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V11.8", layout="wide
 DB_FILE = "kudacuma_history.csv"
 QR_DIR = "qr_codes"
 EXPORT_DIR = "exports"
-ORDER_DETAIL_DIR = "order_details"
 
 # Google Sheets 配置
 SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"
@@ -33,8 +32,6 @@ if not os.path.exists(QR_DIR):
 if not os.path.exists(EXPORT_DIR):
     os.makedirs(EXPORT_DIR)
 
-if not os.path.exists(ORDER_DETAIL_DIR):
-    os.makedirs(ORDER_DETAIL_DIR)
 
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=BASE_COLUMNS).to_csv(
@@ -136,39 +133,9 @@ def safe_format_jpy(v):
         return "¥0"
 
 
-def get_safe_items_editor_data():
-    default_rows = [{
-        "商品": "",
-        "数量": 1,
-        "售价": 0,
-        "折扣": 100.0,
-        "成本": 0
-    }]
 
-    raw = st.session_state.get("items_editor", default_rows)
 
-    # 正常情况：列表
-    if isinstance(raw, list):
-        cleaned = []
-        for row in raw:
-            if isinstance(row, dict):
-                cleaned.append({
-                    "商品": row.get("商品", ""),
-                    "数量": row.get("数量", 1),
-                    "售价": row.get("售价", 0),
-                    "折扣": row.get("折扣", 100.0),
-                    "成本": row.get("成本", 0),
-                })
-        return cleaned if cleaned else default_rows
-
-    # 如果被写成了 DataFrame
-    if isinstance(raw, pd.DataFrame):
-        rows = raw.to_dict(orient="records")
-        return rows if rows else default_rows
-
-    # 其他异常情况，直接回退默认值
-    return default_rows
-    
+def detect_browser_executable():
     """
     为 html2image 自动探测可用浏览器。
     本地 / Streamlit Cloud / Linux 环境都尽量兼容。
@@ -189,105 +156,6 @@ def get_safe_items_editor_data():
         if path and os.path.exists(path):
             return path
     return None
-
-
-def get_detail_file_path(order_id: str) -> str:
-    safe_id = str(order_id).replace("/", "_").replace("\\", "_").strip()
-    return os.path.join(ORDER_DETAIL_DIR, f"{safe_id}.json")
-
-
-def save_order_detail(detail: dict):
-    order_id = str(detail.get("quote_id", "")).strip()
-    if not order_id:
-        return
-    path = get_detail_file_path(order_id)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(detail, f, ensure_ascii=False, indent=2)
-
-
-def load_order_detail(order_id: str):
-    path = get_detail_file_path(order_id)
-    if not os.path.exists(path):
-        return None
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
-
-
-def build_order_detail_payload(
-    client,
-    rate,
-    valid_time,
-    quote_id,
-    service_pct,
-    pay_fee_pct,
-    freight_status,
-    pay_method,
-    w,
-    u_q,
-    u_c,
-    other_c,
-    manual_discount,
-    valid_df,
-    status,
-    grand_total_jpy,
-    net_profit_jpy,
-    margin,
-):
-    items = []
-    if not valid_df.empty:
-        temp_df = valid_df[["商品", "数量", "售价", "折扣", "成本"]].copy()
-        temp_df["数量"] = temp_df["数量"].astype(int)
-        temp_df["售价"] = temp_df["售价"].astype(float)
-        temp_df["折扣"] = temp_df["折扣"].astype(float)
-        temp_df["成本"] = temp_df["成本"].astype(float)
-        items = temp_df.to_dict(orient="records")
-
-    return {
-        "saved_at": datetime.datetime.now().isoformat(),
-        "date": str(datetime.date.today()),
-        "client": client,
-        "rate": float(rate),
-        "valid_time": valid_time,
-        "quote_id": quote_id,
-        "service_pct": float(service_pct),
-        "pay_fee_pct": float(pay_fee_pct),
-        "freight_status": freight_status,
-        "pay_method": pay_method,
-        "weight": float(w),
-        "quote_freight_unit": int(u_q),
-        "cost_freight_unit": int(u_c),
-        "other_cost": int(other_c),
-        "manual_discount": int(manual_discount),
-        "status": status,
-        "grand_total_jpy": int(grand_total_jpy),
-        "net_profit_jpy": int(net_profit_jpy),
-        "margin": float(round(margin, 2)),
-        "items": items,
-    }
-
-
-def apply_order_detail_to_state(detail: dict):
-    st.session_state["prefill_client"] = detail.get("client", "新客户")
-    st.session_state["prefill_rate"] = float(detail.get("rate", 0.0450))
-    st.session_state["prefill_valid_time"] = detail.get("valid_time", "48 Hours")
-    st.session_state["prefill_quote_id"] = detail.get("quote_id", f"KDKM-{datetime.datetime.now().strftime('%m%d%H%M')}")
-    st.session_state["prefill_service_pct"] = float(detail.get("service_pct", 10.0))
-    st.session_state["prefill_pay_fee_pct"] = float(detail.get("pay_fee_pct", 3.0))
-    st.session_state["prefill_freight_status"] = detail.get("freight_status", "已确认")
-    st.session_state["prefill_pay_method"] = detail.get("pay_method", "微信支付")
-    st.session_state["prefill_weight"] = float(detail.get("weight", 1.0))
-    st.session_state["prefill_quote_freight"] = int(detail.get("quote_freight_unit", 2200))
-    st.session_state["prefill_cost_freight"] = int(detail.get("cost_freight_unit", 1400))
-    st.session_state["prefill_other_cost"] = int(detail.get("other_cost", 0))
-    st.session_state["prefill_manual_discount"] = int(detail.get("manual_discount", 0))
-    items = detail.get("items", [])
-    if not items:
-        items = [{"商品": "", "数量": 1, "售价": 0, "折扣": 100.0, "成本": 0}]
-    st.session_state["prefill_items"] = items
-    st.session_state["items_editor"] = items
 
 
 # --- Google Sheets 工具函数 ---
@@ -1204,75 +1072,49 @@ with st.sidebar:
 
 # --- 4. 新建报价 ---
 if menu == "新建报价":
-    valid_time_options = ["48 Hours", "24 Hours", "3 Days"]
-    freight_options = ["已确认", "待确认"]
-    qr_list = [f.replace(".png", "") for f in os.listdir(QR_DIR) if f.endswith(".png")]
-    pay_method_options = ["微信支付"] + qr_list
-
-    prefill_client = st.session_state.pop("prefill_client", "新客户")
-    prefill_rate = st.session_state.pop("prefill_rate", 0.0450)
-    prefill_valid_time = st.session_state.pop("prefill_valid_time", "48 Hours")
-    prefill_quote_id = st.session_state.pop("prefill_quote_id", f"KDKM-{datetime.datetime.now().strftime('%m%d%H%M')}")
-    prefill_service_pct = st.session_state.pop("prefill_service_pct", 10.0)
-    prefill_pay_fee_pct = st.session_state.pop("prefill_pay_fee_pct", 3.0)
-    prefill_freight_status = st.session_state.pop("prefill_freight_status", "已确认")
-    prefill_pay_method = st.session_state.pop("prefill_pay_method", "微信支付")
-    prefill_weight = st.session_state.pop("prefill_weight", 1.0)
-    prefill_quote_freight = st.session_state.pop("prefill_quote_freight", 2200)
-    prefill_cost_freight = st.session_state.pop("prefill_cost_freight", 1400)
-    prefill_other_cost = st.session_state.pop("prefill_other_cost", 0)
-    prefill_manual_discount = st.session_state.pop("prefill_manual_discount", 0)
-    prefill_items = st.session_state.pop("prefill_items", None)
-
-    if "items_editor" not in st.session_state:
-        st.session_state["items_editor"] = (
-            prefill_items
-            if prefill_items is not None
-            else [{"商品": "", "数量": 1, "售价": 0, "折扣": 100.0, "成本": 0}]
-        )
-
-    if prefill_items is not None:
-        st.session_state["items_editor"] = prefill_items
-
     with st.container(border=True):
         c1, c2, c3, c4 = st.columns(4)
-        client = c1.text_input("客户姓名", value=prefill_client)
-        rate = c2.number_input("结算汇率", value=float(prefill_rate), format="%.4f")
-        valid_time = c3.selectbox("有效期", valid_time_options, index=valid_time_options.index(prefill_valid_time if prefill_valid_time in valid_time_options else "48 Hours"))
-        quote_id = c4.text_input("单号", value=prefill_quote_id)
+        client = c1.text_input("客户姓名", "新客户")
+        rate = c2.number_input("结算汇率", value=0.0450, format="%.4f")
+        valid_time = c3.selectbox("有效期", ["48 Hours", "24 Hours", "3 Days"])
+        quote_id = c4.text_input("单号", f"KDKM-{datetime.datetime.now().strftime('%m%d%H%M')}")
 
         d1, d2, d3, d4 = st.columns(4)
-        service_pct = d1.number_input("服务费 %", value=float(prefill_service_pct), step=0.5)
-        pay_fee_pct = d2.number_input("手续费 %", value=float(prefill_pay_fee_pct), step=0.1)
-        freight_status = d3.selectbox("运费状态", freight_options, index=freight_options.index(prefill_freight_status if prefill_freight_status in freight_options else "已确认"))
+        service_pct = d1.number_input("服务费 %", value=10.0, step=0.5)
+        pay_fee_pct = d2.number_input("手续费 %", value=3.0, step=0.1)
+        freight_status = d3.selectbox("运费状态", ["已确认", "待确认"])
 
-        pay_method_default = prefill_pay_method if prefill_pay_method in pay_method_options else "微信支付"
-        pay_method = d4.selectbox("收款通道", pay_method_options, index=pay_method_options.index(pay_method_default))
+        qr_list = [f.replace(".png", "") for f in os.listdir(QR_DIR) if f.endswith(".png")]
+        pay_method = d4.selectbox("收款通道", ["微信支付"] + qr_list)
 
     st.markdown('<div class="control-title">📦 商品录入与成本控制</div>', unsafe_allow_html=True)
     f1, f2, f3, f4, f5 = st.columns(5)
 
     if freight_status == "已确认":
-        w = f1.number_input("重量 (KG)", min_value=0.0, value=float(prefill_weight), step=0.1)
-        u_q = f2.number_input("报价运费 (JPY)", min_value=0, value=int(prefill_quote_freight), step=1)
-        u_c = f3.number_input("成本运费 (JPY)", min_value=0, value=int(prefill_cost_freight), step=1)
+        w = f1.number_input("重量 (KG)", min_value=0.0, value=1.0, step=0.1)
+        u_q = f2.number_input("报价运费 (JPY)", min_value=0, value=2200, step=1)
+        u_c = f3.number_input("成本运费 (JPY)", min_value=0, value=1400, step=1)
     else:
-        w = f1.number_input("重量 (KG)", min_value=0.0, value=float(prefill_weight if prefill_weight >= 0 else 0.0), step=0.1)
-        u_q = f2.number_input("报价运费 (JPY)", min_value=0, value=int(prefill_quote_freight if prefill_quote_freight >= 0 else 0), step=1)
-        u_c = f3.number_input("成本运费 (JPY)", min_value=0, value=int(prefill_cost_freight if prefill_cost_freight >= 0 else 0), step=1)
+        w = f1.number_input("重量 (KG)", min_value=0.0, value=0.0, step=0.1)
+        u_q = f2.number_input("报价运费 (JPY)", min_value=0, value=0, step=1)
+        u_c = f3.number_input("成本运费 (JPY)", min_value=0, value=0, step=1)
 
-    other_c = f4.number_input("额外杂费", min_value=0, value=int(prefill_other_cost), step=100)
-    manual_discount = f5.number_input("优惠减免", min_value=0, value=int(prefill_manual_discount), step=100)
+    other_c = f4.number_input("额外杂费", min_value=0, value=0, step=100)
+    manual_discount = f5.number_input("优惠减免", min_value=0, value=0, step=100)
 
     ship_total_quote = int(w * u_q)
     ship_total_cost = int(w * u_c)
 
     st.info("💡 可在【折扣】列为不同商品单独设置折扣，100 即为不打折。按 Tab 键可更快录入。")
 
-    safe_items_data = get_safe_items_editor_data()
-    
     df_input = st.data_editor(
-        pd.DataFrame(safe_items_data),
+        pd.DataFrame([{
+            "商品": "",
+            "数量": 1,
+            "售价": 0,
+            "折扣": 100.0,
+            "成本": 0
+        }]),
         num_rows="dynamic",
         width="stretch",
         hide_index=True,
@@ -1285,10 +1127,6 @@ if menu == "新建报价":
             "成本": st.column_config.NumberColumn("成本", min_value=0, step=100, width="small"),
         }
     )
-
-st.session_state["items_editor"] = df_input.to_dict(orient="records")
-
-    st.session_state["items_editor"] = df_input.to_dict(orient="records")
 
     valid_df = df_input.copy()
     valid_df["商品"] = valid_df["商品"].fillna("").astype(str)
@@ -1575,28 +1413,6 @@ st.session_state["items_editor"] = df_input.to_dict(orient="records")
                 st.error("无法保存：请先录入商品信息")
             else:
                 margin = (net_profit_jpy / grand_total_jpy * 100) if grand_total_jpy else 0
-                detail_payload = build_order_detail_payload(
-                    client=client,
-                    rate=rate,
-                    valid_time=valid_time,
-                    quote_id=quote_id,
-                    service_pct=service_pct,
-                    pay_fee_pct=pay_fee_pct,
-                    freight_status=freight_status,
-                    pay_method=pay_method,
-                    w=w,
-                    u_q=u_q,
-                    u_c=u_c,
-                    other_c=other_c,
-                    manual_discount=manual_discount_applied,
-                    valid_df=valid_df,
-                    status="报价",
-                    grand_total_jpy=grand_total_jpy,
-                    net_profit_jpy=net_profit_jpy,
-                    margin=margin,
-                )
-                save_order_detail(detail_payload)
-
                 new_row = pd.DataFrame([[
                     datetime.date.today(),
                     client,
@@ -1609,7 +1425,6 @@ st.session_state["items_editor"] = df_input.to_dict(orient="records")
                 ]], columns=BASE_COLUMNS)
 
                 history = load_history()
-                history = history[history["单号"].astype(str) != str(quote_id)].copy()
                 history = pd.concat([history, new_row], ignore_index=True)
                 save_history(history)
                 st.success("已保存为报价")
@@ -1620,28 +1435,6 @@ st.session_state["items_editor"] = df_input.to_dict(orient="records")
                 st.error("无法保存：请先录入商品信息")
             else:
                 margin = (net_profit_jpy / grand_total_jpy * 100) if grand_total_jpy else 0
-                detail_payload = build_order_detail_payload(
-                    client=client,
-                    rate=rate,
-                    valid_time=valid_time,
-                    quote_id=quote_id,
-                    service_pct=service_pct,
-                    pay_fee_pct=pay_fee_pct,
-                    freight_status=freight_status,
-                    pay_method=pay_method,
-                    w=w,
-                    u_q=u_q,
-                    u_c=u_c,
-                    other_c=other_c,
-                    manual_discount=manual_discount_applied,
-                    valid_df=valid_df,
-                    status="成交",
-                    grand_total_jpy=grand_total_jpy,
-                    net_profit_jpy=net_profit_jpy,
-                    margin=margin,
-                )
-                save_order_detail(detail_payload)
-
                 new_row = pd.DataFrame([[
                     datetime.date.today(),
                     client,
@@ -1654,7 +1447,6 @@ st.session_state["items_editor"] = df_input.to_dict(orient="records")
                 ]], columns=BASE_COLUMNS)
 
                 history = load_history()
-                history = history[history["单号"].astype(str) != str(quote_id)].copy()
                 history = pd.concat([history, new_row], ignore_index=True)
                 save_history(history)
                 st.success("已保存为成交")

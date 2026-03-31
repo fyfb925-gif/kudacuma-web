@@ -136,7 +136,39 @@ def safe_format_jpy(v):
         return "¥0"
 
 
-def detect_browser_executable():
+def get_safe_items_editor_data():
+    default_rows = [{
+        "商品": "",
+        "数量": 1,
+        "售价": 0,
+        "折扣": 100.0,
+        "成本": 0
+    }]
+
+    raw = st.session_state.get("items_editor", default_rows)
+
+    # 正常情况：列表
+    if isinstance(raw, list):
+        cleaned = []
+        for row in raw:
+            if isinstance(row, dict):
+                cleaned.append({
+                    "商品": row.get("商品", ""),
+                    "数量": row.get("数量", 1),
+                    "售价": row.get("售价", 0),
+                    "折扣": row.get("折扣", 100.0),
+                    "成本": row.get("成本", 0),
+                })
+        return cleaned if cleaned else default_rows
+
+    # 如果被写成了 DataFrame
+    if isinstance(raw, pd.DataFrame):
+        rows = raw.to_dict(orient="records")
+        return rows if rows else default_rows
+
+    # 其他异常情况，直接回退默认值
+    return default_rows
+    
     """
     为 html2image 自动探测可用浏览器。
     本地 / Streamlit Cloud / Linux 环境都尽量兼容。
@@ -1237,8 +1269,10 @@ if menu == "新建报价":
 
     st.info("💡 可在【折扣】列为不同商品单独设置折扣，100 即为不打折。按 Tab 键可更快录入。")
 
+    safe_items_data = get_safe_items_editor_data()
+    
     df_input = st.data_editor(
-        pd.DataFrame(st.session_state["items_editor"]),
+        pd.DataFrame(safe_items_data),
         num_rows="dynamic",
         width="stretch",
         hide_index=True,
@@ -1251,6 +1285,8 @@ if menu == "新建报价":
             "成本": st.column_config.NumberColumn("成本", min_value=0, step=100, width="small"),
         }
     )
+
+st.session_state["items_editor"] = df_input.to_dict(orient="records")
 
     st.session_state["items_editor"] = df_input.to_dict(orient="records")
 

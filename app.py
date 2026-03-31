@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import datetime
@@ -12,7 +13,7 @@ from google.oauth2.service_account import Credentials
 from html2image import Html2Image
 
 # --- 1. 基础配置 ---
-st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V11.8", layout="wide")
+st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V12.0", layout="wide")
 
 DB_FILE = "kudacuma_history.csv"
 QR_DIR = "qr_codes"
@@ -27,37 +28,18 @@ BASE_COLUMNS = [
     "日期", "客户", "单号", "状态", "运费状态", "总收入", "总利润", "利润率"
 ]
 
-if not os.path.exists(QR_DIR):
-    os.makedirs(QR_DIR)
-
-if not os.path.exists(EXPORT_DIR):
-    os.makedirs(EXPORT_DIR)
-
-if not os.path.exists(ORDER_DETAIL_DIR):
-    os.makedirs(ORDER_DETAIL_DIR)
+for folder in [QR_DIR, EXPORT_DIR, ORDER_DETAIL_DIR]:
+    if not os.path.exists(folder):
+        os.makedirs(folder)
 
 if not os.path.exists(DB_FILE):
-    pd.DataFrame(columns=BASE_COLUMNS).to_csv(
-        DB_FILE, index=False, encoding="utf-8-sig"
-    )
+    pd.DataFrame(columns=BASE_COLUMNS).to_csv(DB_FILE, index=False, encoding="utf-8-sig")
 
 
 # =========================
 # 数据清洗 / 格式化工具函数
 # =========================
 def clean_number_series(series: pd.Series) -> pd.Series:
-    """
-    将金额/百分比等混合字符串安全转为数值。
-    可处理:
-    - 12000
-    - "12000"
-    - "¥12,000"
-    - "12,000"
-    - "25%"
-    - ""
-    - None
-    - nan
-    """
     if series is None:
         return pd.Series(dtype="float64")
 
@@ -101,9 +83,6 @@ def ensure_history_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def normalize_history_df(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    统一清洗历史数据，避免 Google Sheets / CSV / 老版本数据格式不一致导致崩溃。
-    """
     df = ensure_history_columns(df).copy()
 
     if df.empty:
@@ -137,10 +116,6 @@ def safe_format_jpy(v):
 
 
 def detect_browser_executable():
-    """
-    为 html2image 自动探测可用浏览器。
-    本地 / Streamlit Cloud / Linux 环境都尽量兼容。
-    """
     candidates = [
         os.environ.get("CHROME_BIN"),
         "/usr/bin/chromium",
@@ -158,6 +133,10 @@ def detect_browser_executable():
             return path
     return None
 
+
+# =========================
+# 表单状态 / 订单明细
+# =========================
 def default_order_form():
     return {
         "form_client": "新客户",
@@ -190,6 +169,12 @@ def init_order_form_state():
             st.session_state[k] = v
 
 
+def reset_order_form():
+    defaults = default_order_form()
+    for k, v in defaults.items():
+        st.session_state[k] = v
+
+
 def get_detail_file_path(order_id: str) -> str:
     safe_id = str(order_id).replace("/", "_").replace("\\", "_").strip()
     return os.path.join(ORDER_DETAIL_DIR, f"{safe_id}.json")
@@ -213,6 +198,15 @@ def load_order_detail(order_id: str):
             return json.load(f)
     except Exception:
         return None
+
+
+def delete_order_detail(order_id: str):
+    path = get_detail_file_path(order_id)
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+        except Exception:
+            pass
 
 
 def apply_order_detail_to_form(detail: dict):
@@ -291,6 +285,7 @@ def build_order_detail_payload(
         "items": items
     }
 
+
 # --- Google Sheets 工具函数 ---
 @st.cache_resource
 def get_gsheet_client():
@@ -344,7 +339,9 @@ def save_history(df: pd.DataFrame):
         ws = get_history_worksheet()
 
         save_df = df.copy()
-        save_df["日期"] = save_df["日期"].apply(lambda x: x.isoformat() if pd.notna(x) and x != "" else "")
+        save_df["日期"] = save_df["日期"].apply(
+            lambda x: x.isoformat() if pd.notna(x) and x != "" else ""
+        )
 
         for col in ["总收入", "总利润", "利润率"]:
             if col in save_df.columns:
@@ -361,25 +358,11 @@ def save_history(df: pd.DataFrame):
 
         st.success("✅ 已成功写入 Google Sheets")
 
-        # 同步备份本地 CSV
         df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
 
     except Exception as e:
         st.error(f"❌ Google Sheets 保存失败，已回退本地 CSV：{e}")
         df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
-
-
-def load_history_from_csv():
-    try:
-        df = pd.read_csv(DB_FILE, encoding="utf-8-sig")
-    except Exception:
-        df = pd.DataFrame(columns=BASE_COLUMNS)
-    return normalize_history_df(df)
-
-
-def save_history_to_csv(df: pd.DataFrame):
-    safe_df = normalize_history_df(df)
-    safe_df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
 
 
 def prepare_history_for_analysis(df):
@@ -519,14 +502,12 @@ def build_quote_export_html(
             font-family: "Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Zen Hei", "WenQuanYi Micro Hei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             color: #222;
         }}
-
         .page {{
             width: 1500px;
             margin: 0 auto;
             padding: 24px 24px 36px 24px;
             box-sizing: border-box;
         }}
-
         .quote-container {{
             background: white;
             padding: 30px;
@@ -534,20 +515,17 @@ def build_quote_export_html(
             border: 1px solid #ececec;
             box-shadow: 0 4px 18px rgba(0,0,0,0.04);
         }}
-
         .topbar {{
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
         }}
-
         .club-title {{
             font-size: 56px;
             font-weight: 800;
             color: #111;
             line-height: 1.1;
         }}
-
         .client-info {{
             font-size: 28px;
             color: #555;
@@ -555,31 +533,26 @@ def build_quote_export_html(
             margin-top: 12px;
             line-height: 1.6;
         }}
-
         .top-right {{
             text-align: right;
             color: #777;
             font-size: 24px;
             line-height: 1.7;
         }}
-
         .valid-text {{
             color: #E74C3C;
             font-weight: 700;
         }}
-
         .hr {{
             margin: 26px 0 22px 0;
             border-top: 1px solid #eee;
         }}
-
         .main-grid {{
             display: grid;
             grid-template-columns: 1.2fr 0.8fr;
             gap: 18px;
             align-items: start;
         }}
-
         .payment-header {{
             padding: 18px 24px;
             color: white;
@@ -587,7 +560,6 @@ def build_quote_export_html(
             font-weight: 700;
             font-size: 30px;
         }}
-
         .detail-box {{
             padding: 22px;
             border-radius: 0 0 16px 16px;
@@ -595,26 +567,21 @@ def build_quote_export_html(
             border-top: none;
             background: #fcfcfc;
         }}
-
         .left-card {{
             margin-bottom: 18px;
         }}
-
         .items-grid {{
             display: grid;
             grid-template-columns: 1fr;
             gap: 0 18px;
         }}
-
         .items-grid.two-col {{
             grid-template-columns: 1fr 1fr;
         }}
-
         .item-card {{
             padding: 10px 0;
             border-bottom: 1px dashed #eee;
         }}
-
         .item-main-row {{
             display: flex;
             justify-content: space-between;
@@ -624,7 +591,6 @@ def build_quote_export_html(
             color: #2c3e50;
             line-height: 1.5;
         }}
-
         .item-sub-row {{
             display: flex;
             justify-content: space-between;
@@ -634,7 +600,6 @@ def build_quote_export_html(
             color: #777;
             line-height: 1.5;
         }}
-
         .summary-row {{
             display: flex;
             justify-content: space-between;
@@ -643,19 +608,15 @@ def build_quote_export_html(
             font-size: 24px;
             font-weight: 700;
         }}
-
         .summary-row.subtle {{
             color: #555;
         }}
-
         .summary-row.strong {{
             color: #2c3e50;
         }}
-
         .summary-row.discount {{
             color: #E74C3C;
         }}
-
         .fee-row {{
             display: flex;
             justify-content: space-between;
@@ -665,20 +626,17 @@ def build_quote_export_html(
             font-weight: 700;
             line-height: 1.5;
         }}
-
         .grand-row {{
             display: flex;
             justify-content: space-between;
             align-items: center;
             gap: 20px;
         }}
-
         .grand-row-title {{
             font-size: 26px;
             font-weight: 800;
             color: #2C3E50;
         }}
-
         .total-label-jpy {{
             font-size: 54px;
             font-weight: 800;
@@ -687,7 +645,6 @@ def build_quote_export_html(
             margin-top: 14px;
             line-height: 1.2;
         }}
-
         .rmb-price-ref {{
             color: #E74C3C;
             font-size: 32px;
@@ -696,7 +653,6 @@ def build_quote_export_html(
             margin-top: 6px;
             line-height: 1.2;
         }}
-
         .rmb-note {{
             font-size: 20px;
             color: #aaa;
@@ -704,7 +660,6 @@ def build_quote_export_html(
             margin-top: 4px;
             line-height: 1.5;
         }}
-
         .qr-instruction-header {{
             background-color: #f8f9fa;
             border: 1px solid #e9ecef;
@@ -713,20 +668,17 @@ def build_quote_export_html(
             border-radius: 18px 18px 0 0;
             text-align: center;
         }}
-
         .pay-warning {{
             color: #E74C3C;
             font-weight: 800;
             font-size: 30px;
             margin-bottom: 6px;
         }}
-
         .pay-sub {{
             font-size: 25px;
             font-weight: 700;
             color: #333;
         }}
-
         .qr-box {{
             border: 1px solid #e9ecef;
             border-top: none;
@@ -735,14 +687,12 @@ def build_quote_export_html(
             text-align: center;
             background: white;
         }}
-
         .qr-box img {{
             width: 72%;
             max-width: 340px;
             display: block;
             margin: 0 auto;
         }}
-
         .qr-footer-note {{
             margin-top: 10px;
             text-align: center;
@@ -750,7 +700,6 @@ def build_quote_export_html(
             color: #999;
             line-height: 1.45;
         }}
-
         .service-guarantee {{
             margin-top: 18px;
             padding: 16px 18px;
@@ -758,14 +707,12 @@ def build_quote_export_html(
             border: 1px dashed #ccc;
             background: #fafafa;
         }}
-
         .guarantee-title {{
             font-size: 26px;
             font-weight: 800;
             color: #444;
             margin-bottom: 10px;
         }}
-
         .guarantee-item {{
             font-size: 21px;
             color: #777;
@@ -901,6 +848,7 @@ def export_quote_png(
         p_rev_original=p_rev_original,
         p_rev=p_rev,
         discount_amount=discount_amount,
+        manual_discount_applied=manual_discount_applied,
         service_pct=service_pct,
         disp_service_fee=disp_service_fee,
         pay_fee_pct=pay_fee_pct,
@@ -912,7 +860,6 @@ def export_quote_png(
         grand_total_jpy=grand_total_jpy,
         grand_total_rmb=grand_total_rmb,
         qr_abs_path=qr_abs_path,
-        manual_discount_applied=manual_discount_applied,
     )
 
     file_name = f"{quote_id}.png"
@@ -920,11 +867,10 @@ def export_quote_png(
 
     if browser_executable:
         hti = Html2Image(
-    output_path=EXPORT_DIR,
-    browser_executable="/usr/bin/chromium"
-)
+            output_path=EXPORT_DIR,
+            browser_executable=browser_executable
+        )
     else:
-        # 让 html2image 自己尝试；如果云端无浏览器，会在外层被捕获并提示
         hti = Html2Image(output_path=EXPORT_DIR)
 
     hti.screenshot(
@@ -942,7 +888,6 @@ st.markdown("""
 html, body, [class*="css"] {
     font-family: "Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Zen Hei", "WenQuanYi Micro Hei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
-
 .quote-container {
     background: white;
     padding: 30px;
@@ -951,7 +896,6 @@ html, body, [class*="css"] {
     margin-top: 15px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.05);
 }
-
 .club-title {
     font-size: 2.0rem !important;
     font-weight: 700;
@@ -959,7 +903,6 @@ html, body, [class*="css"] {
     line-height: 1.1;
     letter-spacing: -0.02em;
 }
-
 .client-info {
     font-size: 0.94rem;
     color: #555;
@@ -967,7 +910,6 @@ html, body, [class*="css"] {
     margin-top: 10px;
     line-height: 1.6;
 }
-
 .payment-header {
     padding: 13px 20px;
     color: white;
@@ -975,7 +917,6 @@ html, body, [class*="css"] {
     font-weight: 600;
     font-size: 0.98rem;
 }
-
 .detail-box {
     padding: 18px;
     border-radius: 0 0 12px 12px;
@@ -983,7 +924,6 @@ html, body, [class*="css"] {
     border-top: none;
     background-color: #fdfdfd;
 }
-
 .qr-instruction-header {
     background-color: #f8f9fa;
     border: 1px solid #e9ecef;
@@ -992,14 +932,12 @@ html, body, [class*="css"] {
     border-radius: 15px 15px 0 0;
     text-align: center;
 }
-
 .pay-warning {
     color: #E74C3C;
     font-weight: 800;
     font-size: 0.92rem;
     margin-bottom: 3px;
 }
-
 .service-guarantee {
     margin-top: 18px;
     padding: 15px;
@@ -1007,20 +945,17 @@ html, body, [class*="css"] {
     border: 1px dashed #ccc;
     background-color: #fafafa;
 }
-
 .guarantee-title {
     font-size: 0.90rem;
     font-weight: 700;
     color: #444;
     margin-bottom: 8px;
 }
-
 .guarantee-item {
     font-size: 0.80rem;
     color: #777;
     line-height: 1.58;
 }
-
 .qr-footer-note {
     margin-top: 14px;
     text-align: center;
@@ -1028,7 +963,6 @@ html, body, [class*="css"] {
     color: #999;
     line-height: 1.5;
 }
-
 .profit-panel {
     background-color: #1e2130;
     padding: 18px;
@@ -1036,7 +970,6 @@ html, body, [class*="css"] {
     color: #ecf0f1;
     margin-top: 15px;
 }
-
 .profit-row {
     display: flex;
     justify-content: space-between;
@@ -1044,14 +977,12 @@ html, body, [class*="css"] {
     font-size: 0.84rem;
     opacity: 0.95;
 }
-
 .control-title {
     font-size: 0.98rem;
     font-weight: 700;
     color: #333;
     margin: 18px 0 10px 0;
 }
-
 .total-label-jpy {
     font-size: 1.8rem;
     font-weight: 700;
@@ -1060,46 +991,38 @@ html, body, [class*="css"] {
     margin-top: 10px;
     letter-spacing: -0.02em;
 }
-
 .rmb-price-ref {
     color: #E74C3C;
     font-size: 1.05rem !important;
     font-weight: 700;
     text-align: right;
 }
-
 .rmb-note {
     font-size: 0.76rem;
     color: #aaa;
     text-align: right;
     margin-top: 2px;
 }
-
 .discount-text {
     color: #E74C3C;
     font-weight: 700;
 }
-
 .items-grid {
     display: grid;
     grid-template-columns: 1fr;
     gap: 0 18px;
 }
-
 .items-grid.two-col {
     grid-template-columns: 1fr 1fr;
 }
-
 .item-card {
     padding: 8px 0;
     border-bottom: 1px dashed #eee;
     transition: all 0.18s ease;
 }
-
 .item-card:hover {
     background: rgba(0,0,0,0.015);
 }
-
 .item-main-row {
     display: flex;
     justify-content: space-between;
@@ -1108,7 +1031,6 @@ html, body, [class*="css"] {
     color: #2c3e50;
     gap: 12px;
 }
-
 .item-sub-row {
     display: flex;
     justify-content: space-between;
@@ -1117,7 +1039,6 @@ html, body, [class*="css"] {
     color: #777;
     gap: 12px;
 }
-
 .summary-row {
     display: flex;
     justify-content: space-between;
@@ -1126,19 +1047,15 @@ html, body, [class*="css"] {
     font-size: 0.90rem;
     font-weight: 600;
 }
-
 .summary-row.subtle {
     color: #555;
 }
-
 .summary-row.strong {
     color: #2c3e50;
 }
-
 .summary-row.discount {
     color: #E74C3C;
 }
-
 .fee-row {
     display: flex;
     justify-content: space-between;
@@ -1147,13 +1064,11 @@ html, body, [class*="css"] {
     font-size: 0.90rem;
     font-weight: 600;
 }
-
 .grand-row-title {
     font-size: 0.98rem;
     font-weight: 700;
     color: #2C3E50;
 }
-
 .status-tag {
     display: inline-block;
     padding: 2px 8px;
@@ -1161,33 +1076,26 @@ html, body, [class*="css"] {
     font-size: 0.78rem;
     font-weight: 700;
 }
-
 .status-quote {
     background: #fff3cd;
     color: #856404;
 }
-
 .status-deal {
     background: #d4edda;
     color: #155724;
 }
-
 .qr-image-wrap img {
     width:68% !important;
     max-width: 230px !important;
     margin: 0 auto;
     display: block;
 }
-
-/* 录入表格字体保持舒服但稳定 */
 div[data-testid="stDataEditor"] [role="columnheader"] {
     font-size: 0.86rem !important;
 }
-
 div[data-testid="stDataEditor"] [role="gridcell"] {
     font-size: 0.88rem !important;
 }
-
 div[data-testid="stDataEditor"] input,
 div[data-testid="stDataEditor"] textarea {
     font-size: 0.88rem !important;
@@ -1197,7 +1105,7 @@ div[data-testid="stDataEditor"] textarea {
 
 # --- 3. 菜单 ---
 with st.sidebar:
-    st.title("🐻 KDKM V11.8")
+    st.title("🐻 KDKM V12.0")
     if "menu_main" not in st.session_state:
         st.session_state["menu_main"] = "新建报价"
     menu = st.radio("导航", ["新建报价", "历史订单", "运营分析", "系统设置"], key="menu_main")
@@ -1206,69 +1114,50 @@ with st.sidebar:
 # --- 4. 新建报价 ---
 if menu == "新建报价":
     init_order_form_state()
-with st.container(border=True):
-    qr_list = [f.replace(".png", "") for f in os.listdir(QR_DIR) if f.endswith(".png")]
-    pay_method_options = ["微信支付"] + [x for x in qr_list if x != "微信支付"]
 
-    if st.session_state["form_pay_method"] not in pay_method_options:
-        st.session_state["form_pay_method"] = "微信支付"
+    with st.container(border=True):
+        qr_list = [f.replace(".png", "") for f in os.listdir(QR_DIR) if f.endswith(".png")]
+        pay_method_options = ["微信支付"] + [x for x in qr_list if x != "微信支付"]
 
-    valid_time_options = ["48 Hours", "24 Hours", "3 Days"]
-    if st.session_state["form_valid_time"] not in valid_time_options:
-        st.session_state["form_valid_time"] = "48 Hours"
+        if st.session_state["form_pay_method"] not in pay_method_options:
+            st.session_state["form_pay_method"] = "微信支付"
 
-    freight_options = ["已确认", "待确认"]
-    if st.session_state["form_freight_status"] not in freight_options:
-        st.session_state["form_freight_status"] = "已确认"
+        valid_time_options = ["48 Hours", "24 Hours", "3 Days"]
+        if st.session_state["form_valid_time"] not in valid_time_options:
+            st.session_state["form_valid_time"] = "48 Hours"
 
-    c1, c2, c3, c4 = st.columns(4)
-    client = c1.text_input("客户姓名", key="form_client")
-    rate = c2.number_input("结算汇率", min_value=0.0001, value=float(st.session_state["form_rate"]), format="%.4f", key="form_rate")
-    valid_time = c3.selectbox(
-        "有效期",
-        valid_time_options,
-        index=valid_time_options.index(st.session_state["form_valid_time"]),
-        key="form_valid_time"
-    )
-    quote_id = c4.text_input("单号", key="form_quote_id")
+        freight_options = ["已确认", "待确认"]
+        if st.session_state["form_freight_status"] not in freight_options:
+            st.session_state["form_freight_status"] = "已确认"
 
-    d1, d2, d3, d4 = st.columns(4)
-    service_pct = d1.number_input("服务费 %", min_value=0.0, value=float(st.session_state["form_service_pct"]), step=0.5, key="form_service_pct")
-    pay_fee_pct = d2.number_input("手续费 %", min_value=0.0, value=float(st.session_state["form_pay_fee_pct"]), step=0.1, key="form_pay_fee_pct")
-    freight_status = d3.selectbox(
-        "运费状态",
-        freight_options,
-        index=freight_options.index(st.session_state["form_freight_status"]),
-        key="form_freight_status"
-    )
-    pay_method = d4.selectbox(
-        "收款通道",
-        pay_method_options,
-        index=pay_method_options.index(st.session_state["form_pay_method"]),
-        key="form_pay_method"
-    )
+        c1, c2, c3, c4 = st.columns(4)
+        client = c1.text_input("客户姓名", key="form_client")
+        rate = c2.number_input("结算汇率", min_value=0.0001, value=float(st.session_state["form_rate"]), format="%.4f", key="form_rate")
+        valid_time = c3.selectbox("有效期", valid_time_options, index=valid_time_options.index(st.session_state["form_valid_time"]), key="form_valid_time")
+        quote_id = c4.text_input("单号", key="form_quote_id")
 
-st.markdown('<div class="control-title">📦 商品录入与成本控制</div>', unsafe_allow_html=True)
-f1, f2, f3, f4, f5 = st.columns(5)
+        d1, d2, d3, d4 = st.columns(4)
+        service_pct = d1.number_input("服务费 %", min_value=0.0, value=float(st.session_state["form_service_pct"]), step=0.5, key="form_service_pct")
+        pay_fee_pct = d2.number_input("手续费 %", min_value=0.0, value=float(st.session_state["form_pay_fee_pct"]), step=0.1, key="form_pay_fee_pct")
+        freight_status = d3.selectbox("运费状态", freight_options, index=freight_options.index(st.session_state["form_freight_status"]), key="form_freight_status")
+        pay_method = d4.selectbox("收款通道", pay_method_options, index=pay_method_options.index(st.session_state["form_pay_method"]), key="form_pay_method")
 
-if freight_status == "已确认":
-    if st.session_state["form_weight"] <= 0:
-        st.session_state["form_weight"] = 1.0
-    if st.session_state["form_quote_freight"] < 0:
-        st.session_state["form_quote_freight"] = 2200
-    if st.session_state["form_cost_freight"] < 0:
-        st.session_state["form_cost_freight"] = 1400
+    st.markdown('<div class="control-title">📦 商品录入与成本控制</div>', unsafe_allow_html=True)
+    f1, f2, f3, f4, f5 = st.columns(5)
+
+    if freight_status == "已确认":
+        if st.session_state["form_weight"] <= 0:
+            st.session_state["form_weight"] = 1.0
+        if st.session_state["form_quote_freight"] < 0:
+            st.session_state["form_quote_freight"] = 2200
+        if st.session_state["form_cost_freight"] < 0:
+            st.session_state["form_cost_freight"] = 1400
 
     w = f1.number_input("重量 (KG)", min_value=0.0, step=0.1, value=float(st.session_state["form_weight"]), key="form_weight")
     u_q = f2.number_input("报价运费 (JPY)", min_value=0, step=1, value=int(st.session_state["form_quote_freight"]), key="form_quote_freight")
     u_c = f3.number_input("成本运费 (JPY)", min_value=0, step=1, value=int(st.session_state["form_cost_freight"]), key="form_cost_freight")
-else:
-    w = f1.number_input("重量 (KG)", min_value=0.0, step=0.1, value=float(st.session_state["form_weight"]), key="form_weight")
-    u_q = f2.number_input("报价运费 (JPY)", min_value=0, step=1, value=int(st.session_state["form_quote_freight"]), key="form_quote_freight")
-    u_c = f3.number_input("成本运费 (JPY)", min_value=0, step=1, value=int(st.session_state["form_cost_freight"]), key="form_cost_freight")
-
-other_c = f4.number_input("额外杂费", min_value=0, step=100, value=int(st.session_state["form_other_cost"]), key="form_other_cost")
-manual_discount = f5.number_input("优惠减免", min_value=0, step=100, value=int(st.session_state["form_manual_discount"]), key="form_manual_discount")
+    other_c = f4.number_input("额外杂费", min_value=0, step=100, value=int(st.session_state["form_other_cost"]), key="form_other_cost")
+    manual_discount = f5.number_input("优惠减免", min_value=0, step=100, value=int(st.session_state["form_manual_discount"]), key="form_manual_discount")
 
     ship_total_quote = int(w * u_q)
     ship_total_cost = int(w * u_c)
@@ -1276,13 +1165,7 @@ manual_discount = f5.number_input("优惠减免", min_value=0, step=100, value=i
     st.info("💡 可在【折扣】列为不同商品单独设置折扣，100 即为不打折。按 Tab 键可更快录入。")
 
     df_input = st.data_editor(
-        pd.DataFrame([{
-            "商品": "",
-            "数量": 1,
-            "售价": 0,
-            "折扣": 100.0,
-            "成本": 0
-        }]),
+        pd.DataFrame(st.session_state["form_items"]),
         num_rows="dynamic",
         width="stretch",
         hide_index=True,
@@ -1295,6 +1178,7 @@ manual_discount = f5.number_input("优惠减免", min_value=0, step=100, value=i
             "成本": st.column_config.NumberColumn("成本", min_value=0, step=100, width="small"),
         }
     )
+    st.session_state["form_items"] = df_input.to_dict(orient="records")
 
     valid_df = df_input.copy()
     valid_df["商品"] = valid_df["商品"].fillna("").astype(str)
@@ -1312,31 +1196,33 @@ manual_discount = f5.number_input("优惠减免", min_value=0, step=100, value=i
     p_rev_original = int(valid_df["项原价"].sum()) if not valid_df.empty else 0
     p_rev = int(valid_df["项折后"].sum()) if not valid_df.empty else 0
     discount_amount = p_rev_original - p_rev
-    
+
     p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0
-    
-    payment1_jpy = p_rev
-    disp_service_fee = int(p_rev * (service_pct / 100))
-    disp_pay_fee = int((p_rev + disp_service_fee) * (pay_fee_pct / 100))
+
+    manual_discount_applied = min(int(manual_discount), p_rev)
+    payment1_jpy = max(0, p_rev - manual_discount_applied)
+
+    disp_service_fee = int(payment1_jpy * (service_pct / 100))
+    disp_pay_fee = int((payment1_jpy + disp_service_fee) * (pay_fee_pct / 100))
     p2_total = disp_service_fee + disp_pay_fee
 
     if freight_status == "已确认":
-        grand_total_jpy = p_rev + p2_total + ship_total_quote
+        grand_total_jpy = payment1_jpy + p2_total + ship_total_quote
     else:
-        grand_total_jpy = p_rev + p2_total
+        grand_total_jpy = payment1_jpy + p2_total
 
     grand_total_rmb = round(grand_total_jpy * rate, 2)
 
     with st.sidebar:
         loss_gap = int(grand_total_jpy * 0.02) if grand_total_jpy > 0 else 0
-    net_profit_jpy = (
-        (payment1_jpy - p_cost)
-        + (ship_total_quote - ship_total_cost)
-        + disp_service_fee
-        + disp_pay_fee
-        - loss_gap
-        - other_c
-    )
+        net_profit_jpy = (
+            (payment1_jpy - p_cost)
+            + (ship_total_quote - ship_total_cost)
+            + disp_service_fee
+            + disp_pay_fee
+            - loss_gap
+            - other_c
+        )
         net_profit_rmb = round(net_profit_jpy * rate, 2)
 
         st.markdown(f"""
@@ -1410,7 +1296,7 @@ manual_discount = f5.number_input("优惠减免", min_value=0, step=100, value=i
 
                 if disc_pct < 100 and discounted_price != orig_price:
                     card_html += (
-                        f"<div class='item-sub-row'>"
+                        "<div class='item-sub-row'>"
                         "<span>折后金额</span>"
                         f"<span>¥ {discounted_price:,}</span>"
                         "</div>"
@@ -1428,25 +1314,25 @@ manual_discount = f5.number_input("优惠减免", min_value=0, step=100, value=i
                 "</div>"
             )
 
-           if discount_amount > 0:
-            summary_html += (
-                f"<div class='summary-row strong'>"
-                f"<span>折后金额合计</span><span>¥ {p_rev:,}</span>"
-                "</div>"
-                f"<div class='summary-row discount'>"
-                f"<span class='discount-text'>商品折扣总计</span><span class='discount-text'>-¥ {discount_amount:,}</span>"
-                "</div>"
-            )
-        
-        if manual_discount_applied > 0:
-            summary_html += (
-                f"<div class='summary-row discount'>"
-                f"<span class='discount-text'>优惠减免</span><span class='discount-text'>-¥ {manual_discount_applied:,}</span>"
-                "</div>"
-                f"<div class='summary-row strong'>"
-                f"<span>第一笔应收小计</span><span>¥ {payment1_jpy:,}</span>"
-                "</div>"
-            )
+            if discount_amount > 0:
+                summary_html += (
+                    f"<div class='summary-row strong'>"
+                    f"<span>折后金额合计</span><span>¥ {p_rev:,}</span>"
+                    "</div>"
+                    f"<div class='summary-row discount'>"
+                    f"<span class='discount-text'>商品折扣总计</span><span class='discount-text'>-¥ {discount_amount:,}</span>"
+                    "</div>"
+                )
+
+            if manual_discount_applied > 0:
+                summary_html += (
+                    f"<div class='summary-row discount'>"
+                    f"<span class='discount-text'>优惠减免</span><span class='discount-text'>-¥ {manual_discount_applied:,}</span>"
+                    "</div>"
+                    f"<div class='summary-row strong'>"
+                    f"<span>第一笔应收小计</span><span>¥ {payment1_jpy:,}</span>"
+                    "</div>"
+                )
         else:
             items_html = "<div style='color:#bbb; padding:12px 0; font-size:0.92rem;'>等待录入...</div>"
 
@@ -1572,7 +1458,13 @@ manual_discount = f5.number_input("优惠减免", min_value=0, step=100, value=i
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:18px;'></div>", unsafe_allow_html=True)
-    s1, s2, s3 = st.columns(3)
+    s0, s1, s2, s3 = st.columns(4)
+
+    with s0:
+        if st.button("🆕 清空表单", use_container_width=True):
+            reset_order_form()
+            st.success("表单已重置")
+            st.rerun()
 
     with s1:
         if st.button("💾 保存为报价", use_container_width=True):
@@ -1580,6 +1472,29 @@ manual_discount = f5.number_input("优惠减免", min_value=0, step=100, value=i
                 st.error("无法保存：请先录入商品信息")
             else:
                 margin = (net_profit_jpy / grand_total_jpy * 100) if grand_total_jpy else 0
+
+                detail_payload = build_order_detail_payload(
+                    client=client,
+                    rate=rate,
+                    valid_time=valid_time,
+                    quote_id=quote_id,
+                    service_pct=service_pct,
+                    pay_fee_pct=pay_fee_pct,
+                    freight_status=freight_status,
+                    pay_method=pay_method,
+                    w=w,
+                    u_q=u_q,
+                    u_c=u_c,
+                    other_c=other_c,
+                    manual_discount=manual_discount_applied,
+                    valid_df=valid_df,
+                    status="报价",
+                    grand_total_jpy=grand_total_jpy,
+                    net_profit_jpy=net_profit_jpy,
+                    margin=margin
+                )
+                save_order_detail(detail_payload)
+
                 new_row = pd.DataFrame([[
                     datetime.date.today(),
                     client,
@@ -1592,6 +1507,7 @@ manual_discount = f5.number_input("优惠减免", min_value=0, step=100, value=i
                 ]], columns=BASE_COLUMNS)
 
                 history = load_history()
+                history = history[history["单号"].astype(str) != str(quote_id)].copy()
                 history = pd.concat([history, new_row], ignore_index=True)
                 save_history(history)
                 st.success("已保存为报价")
@@ -1602,6 +1518,29 @@ manual_discount = f5.number_input("优惠减免", min_value=0, step=100, value=i
                 st.error("无法保存：请先录入商品信息")
             else:
                 margin = (net_profit_jpy / grand_total_jpy * 100) if grand_total_jpy else 0
+
+                detail_payload = build_order_detail_payload(
+                    client=client,
+                    rate=rate,
+                    valid_time=valid_time,
+                    quote_id=quote_id,
+                    service_pct=service_pct,
+                    pay_fee_pct=pay_fee_pct,
+                    freight_status=freight_status,
+                    pay_method=pay_method,
+                    w=w,
+                    u_q=u_q,
+                    u_c=u_c,
+                    other_c=other_c,
+                    manual_discount=manual_discount_applied,
+                    valid_df=valid_df,
+                    status="成交",
+                    grand_total_jpy=grand_total_jpy,
+                    net_profit_jpy=net_profit_jpy,
+                    margin=margin
+                )
+                save_order_detail(detail_payload)
+
                 new_row = pd.DataFrame([[
                     datetime.date.today(),
                     client,
@@ -1614,6 +1553,7 @@ manual_discount = f5.number_input("优惠减免", min_value=0, step=100, value=i
                 ]], columns=BASE_COLUMNS)
 
                 history = load_history()
+                history = history[history["单号"].astype(str) != str(quote_id)].copy()
                 history = pd.concat([history, new_row], ignore_index=True)
                 save_history(history)
                 st.success("已保存为成交")
@@ -1677,6 +1617,30 @@ elif menu == "历史订单":
 
         st.dataframe(show_df, use_container_width=True, hide_index=True)
 
+        st.markdown("### 重新编辑订单")
+        edit_df = history.copy()
+        edit_df["展示"] = (
+            edit_df["日期"].astype(str) + " | "
+            + edit_df["客户"].astype(str) + " | "
+            + edit_df["单号"].astype(str) + " | "
+            + edit_df["状态"].astype(str)
+        )
+
+        selected_edit_order = st.selectbox("选择一条订单重新载入编辑", edit_df["展示"].tolist())
+
+        if st.button("✏️ 载入到新建报价页面"):
+            selected_row = edit_df[edit_df["展示"] == selected_edit_order].iloc[0]
+            selected_order_id = str(selected_row["单号"])
+            detail = load_order_detail(selected_order_id)
+
+            if detail is None:
+                st.error("这条订单是旧版本记录，目前只有汇总数据，没有商品明细，暂时无法重新编辑。之后按新版本保存的订单即可支持回填编辑。")
+            else:
+                apply_order_detail_to_form(detail)
+                st.session_state["menu_main"] = "新建报价"
+                st.success("订单已载入，正在跳转到新建报价页面。")
+                st.rerun()
+
         st.markdown("### 报价转成交")
         quote_df = history[history["状态"].astype(str) == "报价"].copy()
 
@@ -1694,13 +1658,19 @@ elif menu == "历史订单":
 
             if st.button("🔄 改为成交"):
                 idx = quote_df[quote_df["展示"] == selected_quote].index[0]
+                order_id = str(history.loc[idx, "单号"])
                 history.loc[idx, "状态"] = "成交"
                 save_history(history)
+
+                detail = load_order_detail(order_id)
+                if detail is not None:
+                    detail["status"] = "成交"
+                    save_order_detail(detail)
+
                 st.success("该记录已改为成交，请刷新或切换页面查看最新结果。")
 
         st.markdown("### 删除订单记录")
         delete_df = history.copy()
-
         delete_df["总收入_清洗"] = clean_number_series(delete_df["总收入"]).fillna(0)
 
         delete_df["展示"] = (
@@ -1721,6 +1691,10 @@ elif menu == "历史订单":
             if not selected_labels:
                 st.warning("请先选择要删除的记录。")
             else:
+                selected_rows = delete_df[delete_df["展示"].isin(selected_labels)].copy()
+                for _, row in selected_rows.iterrows():
+                    delete_order_detail(str(row["单号"]))
+
                 remaining = delete_df[~delete_df["展示"].isin(selected_labels)].copy()
                 remaining = remaining[BASE_COLUMNS]
                 save_history(remaining)
@@ -1734,7 +1708,6 @@ elif menu == "运营分析":
     history = load_history()
     df = prepare_history_for_analysis(history)
 
-    # 只统计成交
     df = df[df["状态"] == "成交"].copy()
 
     if df.empty:
@@ -1783,7 +1756,6 @@ elif menu == "运营分析":
                     利润=("总利润", "sum"),
                 )
                 .reset_index()
-                .rename(columns={"日期": "日期"})
             )
 
             st.dataframe(daily, use_container_width=True, hide_index=True)

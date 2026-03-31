@@ -1270,9 +1270,9 @@ if menu == "新建报价":
     u_q = f2.number_input("报价运费 (JPY)", min_value=0, step=1, key="quote_uq_input")
     u_c = f3.number_input("成本运费 (JPY)", min_value=0, step=1, key="quote_uc_input")
     other_c = f4.number_input("额外杂费", min_value=0, step=100, key="quote_other_c_input")
-    manual_discount = f5.number_input("优惠减免", min_value=0, step=100, key="quote_manual_discount_input")
+    manual_discount = f5.number_input("金额调整", min_value=0, step=100, key="quote_manual_discount_input")
 
-    discount_note = st.text_input("优惠备注（可选）", key="quote_discount_note_input")
+    discount_note = st.text_input("调整理由（可选）", key="quote_discount_note_input")
 
     ship_total_quote = int(w * u_q)
     ship_total_cost = int(w * u_c)

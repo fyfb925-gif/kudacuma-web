@@ -468,11 +468,11 @@ def build_quote_export_html(
     grand_discount_html = ""
     if manual_discount > 0:
         grand_discount_html += (
-            f"<div class='summary-row discount'><span>订单优惠</span><span>-¥ {manual_discount:,}</span></div>"
+            f"<div class='summary-row discount'><span>金额调整</span><span>-¥ {manual_discount:,}</span></div>"
         )
     if str(discount_note).strip():
         grand_discount_html += (
-            f"<div class='summary-row subtle'><span>优惠备注</span><span>{html.escape(str(discount_note))}</span></div>"
+            f"<div class='summary-row subtle'><span>调整说明</span><span>{html.escape(str(discount_note))}</span></div>"
         )
 
     if freight_status == "已确认":
@@ -1348,7 +1348,7 @@ if menu == "新建报价":
                 <div class="profit-row"><span>代购费</span><span>+¥{disp_service_fee:,}</span></div>
                 <div class="profit-row"><span>运费差</span><span>+¥{ship_total_quote - ship_total_cost:,}</span></div>
                 <div class="profit-row"><span>通道差</span><span>+¥{disp_pay_fee:,}</span></div>
-                <div class="profit-row" style="color:#f39c12;"><span>订单优惠</span><span>-¥{manual_discount:,}</span></div>
+                <div class="profit-row" style="color:#f39c12;"><span>金额调整</span><span>-¥{manual_discount:,}</span></div>
                 <div class="profit-row" style="color:#e74c3c;"><span>结算损耗(2%)</span><span>-¥{loss_gap:,}</span></div>
                 <div class="profit-row" style="color:#f39c12;"><span>额外杂费</span><span>-¥{other_c:,}</span></div>
                 <hr style="margin:10px 0; border-top:1px solid #3d4256;">
@@ -1491,11 +1491,11 @@ if menu == "新建报价":
         grand_discount_preview = ""
         if manual_discount > 0:
             grand_discount_preview += (
-                f"<div class='summary-row discount'><span>订单优惠</span><span>-¥ {manual_discount:,}</span></div>"
+                f"<div class='summary-row discount'><span>金额调整</span><span>-¥ {manual_discount:,}</span></div>"
             )
         if str(discount_note).strip():
             grand_discount_preview += (
-                f"<div class='summary-row subtle'><span>优惠备注</span><span>{html.escape(str(discount_note))}</span></div>"
+                f"<div class='summary-row subtle'><span>调整说明</span><span>{html.escape(str(discount_note))}</span></div>"
             )
 
         if freight_status == "已确认":

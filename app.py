@@ -4,7 +4,6 @@ import datetime
 import os
 import html
 import shutil
-import json
 from pathlib import Path
 
 import gspread
@@ -31,7 +30,6 @@ if not os.path.exists(QR_DIR):
 
 if not os.path.exists(EXPORT_DIR):
     os.makedirs(EXPORT_DIR)
-
 
 if not os.path.exists(DB_FILE):
     pd.DataFrame(columns=BASE_COLUMNS).to_csv(
@@ -131,8 +129,6 @@ def safe_format_jpy(v):
         return f"¥{int(float(v)):,}"
     except Exception:
         return "¥0"
-
-
 
 
 def detect_browser_executable():
@@ -321,7 +317,7 @@ def build_quote_export_html(
     p_rev_original,
     p_rev,
     discount_amount,
-    manual_discount_applied,
+    manual_discount,
     service_pct,
     disp_service_fee,
     pay_fee_pct,
@@ -343,13 +339,13 @@ def build_quote_export_html(
     if discount_amount > 0:
         summary_html += (
             f"<div class='summary-row strong'><span>折后金额合计</span><span>¥ {p_rev:,}</span></div>"
-            f"<div class='summary-row discount'><span>商品折扣总计</span><span>-¥ {discount_amount:,}</span></div>"
+            f"<div class='summary-row discount'><span>优惠折扣总计</span><span>-¥ {discount_amount:,}</span></div>"
         )
 
-    if manual_discount_applied > 0:
-        summary_html += (
-            f"<div class='summary-row discount'><span>优惠减免</span><span>-¥ {manual_discount_applied:,}</span></div>"
-            f"<div class='summary-row strong'><span>第一笔应收小计</span><span>¥ {payment1_jpy:,}</span></div>"
+    grand_discount_html = ""
+    if manual_discount > 0:
+        grand_discount_html = (
+            f"<div class='summary-row discount'><span>订单优惠</span><span>-¥ {manual_discount:,}</span></div>"
         )
 
     if freight_status == "已确认":
@@ -679,6 +675,7 @@ def build_quote_export_html(
                         <div class="left-card">
                             <div class="payment-header" style="background:#2C3E50;">🧾 订单总计 (Grand Total)</div>
                             <div class="detail-box" style="border-left:5px solid #2C3E50; background:#f8f9fa;">
+                                {grand_discount_html}
                                 <div class="grand-row">
                                     <span class="grand-row-title">{grand_title}</span>
                                     <div style="text-align:right;">
@@ -740,7 +737,7 @@ def export_quote_png(
     p_rev_original,
     p_rev,
     discount_amount,
-    manual_discount_applied,
+    manual_discount,
     service_pct,
     disp_service_fee,
     pay_fee_pct,
@@ -768,7 +765,7 @@ def export_quote_png(
         p_rev_original=p_rev_original,
         p_rev=p_rev,
         discount_amount=discount_amount,
-        manual_discount_applied=manual_discount_applied,
+        manual_discount=manual_discount,
         service_pct=service_pct,
         disp_service_fee=disp_service_fee,
         pay_fee_pct=pay_fee_pct,
@@ -1065,9 +1062,7 @@ div[data-testid="stDataEditor"] textarea {
 # --- 3. 菜单 ---
 with st.sidebar:
     st.title("🐻 KDKM V11.8")
-    if "menu_main" not in st.session_state:
-        st.session_state["menu_main"] = "新建报价"
-    menu = st.radio("导航", ["新建报价", "历史订单", "运营分析", "系统设置"], key="menu_main")
+    menu = st.radio("导航", ["新建报价", "历史订单", "运营分析", "系统设置"])
 
 
 # --- 4. 新建报价 ---
@@ -1080,7 +1075,7 @@ if menu == "新建报价":
         quote_id = c4.text_input("单号", f"KDKM-{datetime.datetime.now().strftime('%m%d%H%M')}")
 
         d1, d2, d3, d4 = st.columns(4)
-        service_pct = d1.number_input("服务费 %", value=10.0, step=0.5)
+        service_pct = d1.number_input("服务费 %", value=7.0, step=0.5)
         pay_fee_pct = d2.number_input("手续费 %", value=3.0, step=0.1)
         freight_status = d3.selectbox("运费状态", ["已确认", "待确认"])
 
@@ -1147,39 +1142,41 @@ if menu == "新建报价":
 
     p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0
 
-    manual_discount_applied = min(int(manual_discount), p_rev)
-    payment1_jpy = max(0, p_rev - manual_discount_applied)
-    disp_service_fee = int(payment1_jpy * (service_pct / 100))
-    disp_pay_fee = int((payment1_jpy + disp_service_fee) * (pay_fee_pct / 100))
+    payment1_jpy = p_rev
+    disp_service_fee = int(p_rev * (service_pct / 100))
+    disp_pay_fee = int((p_rev + disp_service_fee) * (pay_fee_pct / 100))
     p2_total = disp_service_fee + disp_pay_fee
 
     if freight_status == "已确认":
-        grand_total_jpy = payment1_jpy + p2_total + ship_total_quote
+        grand_total_jpy = p_rev + p2_total + ship_total_quote - manual_discount
     else:
-        grand_total_jpy = payment1_jpy + p2_total
+        grand_total_jpy = p_rev + p2_total - manual_discount
+
+    grand_total_jpy = max(0, grand_total_jpy)
 
     grand_total_rmb = round(grand_total_jpy * rate, 2)
 
     with st.sidebar:
         loss_gap = int(grand_total_jpy * 0.02) if grand_total_jpy > 0 else 0
         net_profit_jpy = (
-            (payment1_jpy - p_cost)
+            (p_rev - p_cost)
             + (ship_total_quote - ship_total_cost)
             + disp_service_fee
             + disp_pay_fee
             - loss_gap
             - other_c
+            - manual_discount
         )
         net_profit_rmb = round(net_profit_jpy * rate, 2)
 
         st.markdown(f"""
             <div class="profit-panel">
                 <div style="font-weight:600; margin-bottom:12px; border-bottom:1px solid #3d4256; padding-bottom:5px;">📊 收益透视图</div>
-                <div class="profit-row"><span>商品利</span><span>+¥{payment1_jpy - p_cost:,}</span></div>
-                <div class="profit-row" style="color:#f39c12;"><span>优惠减免</span><span>-¥{manual_discount_applied:,}</span></div>
+                <div class="profit-row"><span>商品利</span><span>+¥{p_rev - p_cost:,}</span></div>
                 <div class="profit-row"><span>代购费</span><span>+¥{disp_service_fee:,}</span></div>
                 <div class="profit-row"><span>运费差</span><span>+¥{ship_total_quote - ship_total_cost:,}</span></div>
                 <div class="profit-row"><span>通道差</span><span>+¥{disp_pay_fee:,}</span></div>
+                <div class="profit-row" style="color:#f39c12;"><span>订单优惠</span><span>-¥{manual_discount:,}</span></div>
                 <div class="profit-row" style="color:#e74c3c;"><span>结算损耗(2%)</span><span>-¥{loss_gap:,}</span></div>
                 <div class="profit-row" style="color:#f39c12;"><span>额外杂费</span><span>-¥{other_c:,}</span></div>
                 <hr style="margin:10px 0; border-top:1px solid #3d4256;">
@@ -1267,17 +1264,7 @@ if menu == "新建报价":
                     f"<span>折后金额合计</span><span>¥ {p_rev:,}</span>"
                     "</div>"
                     f"<div class='summary-row discount'>"
-                    f"<span class='discount-text'>商品折扣总计</span><span class='discount-text'>-¥ {discount_amount:,}</span>"
-                    "</div>"
-                )
-
-            if manual_discount_applied > 0:
-                summary_html += (
-                    f"<div class='summary-row discount'>"
-                    f"<span class='discount-text'>优惠减免</span><span class='discount-text'>-¥ {manual_discount_applied:,}</span>"
-                    "</div>"
-                    f"<div class='summary-row strong'>"
-                    f"<span>第一笔应收小计</span><span>¥ {payment1_jpy:,}</span>"
+                    f"<span class='discount-text'>优惠折扣总计</span><span class='discount-text'>-¥ {discount_amount:,}</span>"
                     "</div>"
                 )
         else:
@@ -1329,9 +1316,16 @@ if menu == "新建报价":
             unsafe_allow_html=True
         )
 
+        grand_discount_preview = ""
+        if manual_discount > 0:
+            grand_discount_preview = (
+                f"<div class='summary-row discount'><span>订单优惠</span><span>-¥ {manual_discount:,}</span></div>"
+            )
+
         if freight_status == "已确认":
             st.markdown(
                 f"<div class='detail-box' style='border-left:4px solid #2C3E50; background-color:#f8f9fa;'>"
+                f"{grand_discount_preview}"
                 f"<div style='display:flex; justify-content:space-between; align-items:center;'>"
                 f"<span class='grand-row-title'>两笔支付合计</span>"
                 f"<div style='text-align:right;'>"
@@ -1343,6 +1337,7 @@ if menu == "新建报价":
         else:
             st.markdown(
                 f"<div class='detail-box' style='border-left:4px solid #2C3E50; background-color:#f8f9fa;'>"
+                f"{grand_discount_preview}"
                 f"<div style='display:flex; justify-content:space-between; align-items:center;'>"
                 f"<span class='grand-row-title'>当前已确认金额</span>"
                 f"<div style='text-align:right;'>"
@@ -1465,7 +1460,7 @@ if menu == "新建报价":
                     p_rev_original=p_rev_original,
                     p_rev=p_rev,
                     discount_amount=discount_amount,
-                    manual_discount_applied=manual_discount_applied,
+                    manual_discount=manual_discount,
                     service_pct=service_pct,
                     disp_service_fee=disp_service_fee,
                     pay_fee_pct=pay_fee_pct,
@@ -1509,28 +1504,6 @@ elif menu == "历史订单":
         show_df["利润率"] = clean_number_series(show_df["利润率"]).fillna(0).map(lambda x: f"{float(x):.2f}%")
 
         st.dataframe(show_df, use_container_width=True, hide_index=True)
-
-        st.markdown("### 重新编辑订单")
-        edit_df = history.copy()
-        edit_df["展示"] = (
-            edit_df["日期"].astype(str) + " | "
-            + edit_df["客户"].astype(str) + " | "
-            + edit_df["单号"].astype(str) + " | "
-            + edit_df["状态"].astype(str)
-        )
-        selected_edit_order = st.selectbox("选择一条订单重新载入编辑", edit_df["展示"].tolist())
-
-        if st.button("✏️ 载入到新建报价页面"):
-            selected_row = edit_df[edit_df["展示"] == selected_edit_order].iloc[0]
-            selected_order_id = str(selected_row["单号"])
-            detail = load_order_detail(selected_order_id)
-
-            if detail is None:
-                st.error("这条订单是旧版本记录，目前只有汇总数据，没有商品明细，暂时无法重新编辑。请先用新版本重新保存一次。")
-            else:
-                apply_order_detail_to_state(detail)
-                st.session_state["menu_main"] = "新建报价"
-                st.rerun()
 
         st.markdown("### 报价转成交")
         quote_df = history[history["状态"].astype(str) == "报价"].copy()

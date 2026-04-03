@@ -1700,27 +1700,43 @@ if menu == "新建报价":
         """, unsafe_allow_html=True)
         
     with qr:
+        st.markdown(
+            '<div class="qr-instruction-header">',
+            unsafe_allow_html=True
+        )
+    
+        st.markdown(
+            '<div class="pay-warning">⚠️ 本订单需分两笔金额支付</div>',
+            unsafe_allow_html=True
+        )
+    
         if freight_currency_mode == "人民币结算":
-            qr_sub_text = """
-    <div style="display:flex; flex-direction:column; gap:6px; align-items:center; margin-top:2px;">
-        <div style="font-size:0.95rem; font-weight:600; color:#333;">💴 第一笔：请按日元金额完成支付</div>
-        <div style="font-size:0.95rem; font-weight:700; color:#1677ff;">💰 第二笔：请按人民币金额通过微信转账支付</div>
-    </div>
-    """
+            st.markdown(
+                '<div style="font-size:0.95rem; font-weight:600; color:#333; line-height:1.8; text-align:center;">'
+                '💴 第一笔：请按日元金额完成支付<br>'
+                '<span style="font-weight:700; color:#1677ff;">💰 第二笔：请按人民币金额通过微信转账支付</span>'
+                '</div>',
+                unsafe_allow_html=True
+            )
         else:
-            qr_sub_text = """
-    <div style="font-size:0.95rem; font-weight:600; color:#333; line-height:1.8; text-align:center;">请扫码并输入对应日元金额完成支付</div>
-    """
+            st.markdown(
+                '<div style="font-size:0.95rem; font-weight:600; color:#333; line-height:1.8; text-align:center;">'
+                '请扫码并输入对应日元金额完成支付'
+                '</div>',
+                unsafe_allow_html=True
+            )
     
-        qr_header_html = f"""
-    <div class="qr-instruction-header">
-        <div class="pay-warning">⚠️ 本订单需分两笔金额支付</div>
-        {qr_sub_text}
-        <div style="color:#999; font-size:0.8rem; margin-top:6px; line-height:1.6;">请严格按照对应金额与币种完成支付</div>
-    </div>
-    """
+        st.markdown(
+            '<div style="color:#999; font-size:0.8rem; margin-top:6px; line-height:1.6; text-align:center;">'
+            '请严格按照对应金额与币种完成支付'
+            '</div>',
+            unsafe_allow_html=True
+        )
     
-        st.markdown(qr_header_html, unsafe_allow_html=True)
+        st.markdown(
+            '</div>',
+            unsafe_allow_html=True
+        )
     
         st.markdown(
             '<div style="border: 1px solid #e9ecef; border-top:none; padding:16px 18px 14px 18px; border-radius: 0 0 15px 15px; text-align:center;">',

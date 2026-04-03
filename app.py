@@ -12,7 +12,7 @@ from google.oauth2.service_account import Credentials
 from html2image import Html2Image
 
 # --- 1. 基础配置 ---
-st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V11.9", layout="wide")
+st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V2", layout="wide")
 
 DB_FILE = "kudacuma_history.csv"
 QR_DIR = "qr_codes"
@@ -1254,7 +1254,7 @@ div[data-testid="stDataEditor"] textarea {
 
 # --- 3. 菜单 ---
 with st.sidebar:
-    st.title("🐻 KDKM V11.9")
+    st.title("🐻 KDKM V2")
     if "menu_main" not in st.session_state:
         st.session_state["menu_main"] = "新建报价"
     menu = st.radio("导航", ["新建报价", "历史订单", "运营分析", "系统设置"], key="menu_main")

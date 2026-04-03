@@ -1711,55 +1711,43 @@ if menu == "新建报价":
         )
     
         if freight_currency_mode == "人民币结算":
-            pay_warning_html = f"""
-            <div style="border:1px solid #eee; border-radius:14px; padding:16px 18px; text-align:center; margin-top:12px;">
-        
-                <div style="font-size:1.05rem; font-weight:700; color:#e74c3c; margin-bottom:10px;">
-                    ⚠️ 本订单需分两笔金额支付
-                </div>
-        
-                <div style="line-height:1.9;">
-                    <div style="font-size:1.0rem; font-weight:600; color:#333;">
-                        第一笔：请按日元金额完成支付
-                    </div>
-        
-                    <div style="font-size:1.0rem; font-weight:700; color:#1677ff; margin-top:6px;">
-                        第二笔直接微信按人民币金额转账
-                    </div>
-                </div>
-        
-                <div style="color:#9a9a9a; font-size:0.76rem; margin-top:12px; line-height:1.5;">
-                    请严格按照对应金额与币种完成支付
-                </div>
-        
-            </div>
-            """
+            pay_warning_html = """
+    <div style="margin-top:8px; text-align:center; line-height:1.9;">
+        <div style="font-size:1.0rem; font-weight:600; color:#333;">
+            第一笔：请按日元金额完成支付
+        </div>
+        <div style="font-size:1.0rem; font-weight:700; color:#1677ff; margin-top:6px;">
+            第二笔：请按人民币金额通过微信转账支付
+        </div>
+    </div>
+    """
         else:
-            pay_warning_html = f"""
-            <div style="border:1px solid #eee; border-radius:14px; padding:16px 18px; text-align:center; margin-top:12px;">
-        
-                <div style="font-size:1.05rem; font-weight:700; color:#333; margin-bottom:6px;">
-                    请扫码并输入对应日元金额完成支付
-                </div>
-        
-                <div style="color:#9a9a9a; font-size:0.76rem; margin-top:10px;">
-                    请严格按照对应金额完成支付
-                </div>
-        
-            </div>
-            """
+            pay_warning_html = """
+    <div style="margin-top:8px; font-size:1.0rem; font-weight:600; color:#333; line-height:1.8; text-align:center;">
+        请扫码并输入对应日元金额完成支付
+    </div>
+    """
+    
+        st.markdown(pay_warning_html, unsafe_allow_html=True)
     
         st.markdown(
-            '<div style="color:#999; font-size:0.76rem; margin-top:10px; line-height:1.5; text-align:center;">'
+            '<div style="color:#9a9a9a; font-size:0.76rem; margin-top:12px; line-height:1.5; text-align:center;">'
             '请严格按照对应金额与币种完成支付'
             '</div>',
             unsafe_allow_html=True
         )
-    
-        st.markdown(
-            '</div>',
-            unsafe_allow_html=True
-        )
+        
+            st.markdown(
+                '<div style="color:#999; font-size:0.76rem; margin-top:10px; line-height:1.5; text-align:center;">'
+                '请严格按照对应金额与币种完成支付'
+                '</div>',
+                unsafe_allow_html=True
+            )
+        
+            st.markdown(
+                '</div>',
+                unsafe_allow_html=True
+            )
     
         st.markdown(
             '<div style="border: 1px solid #e9ecef; border-top:none; padding:16px 18px 14px 18px; border-radius: 0 0 15px 15px; text-align:center;">',

@@ -882,7 +882,7 @@ def build_quote_export_html(
 
                     <div>
                         <div class="qr-instruction-header">
-                            <div class="pay-warning">⚠️ 本订单需分两笔支付</div>
+                            <div class="pay-warning">⚠️ 订单需分两笔金额支付</div>
                             <div class="pay-sub">{qr_pay_sub}</div>
                         </div>
 
@@ -1698,7 +1698,7 @@ if menu == "新建报价":
                 <div class="guarantee-item">2. 如遇店铺暂时缺货，我方会第一时间与您沟通，可选择退款或等待补货后再安排下单。</div>
             </div>
         """, unsafe_allow_html=True)
-        
+    
     with qr:
         st.markdown(
             '<div class="qr-instruction-header">',
@@ -1706,48 +1706,42 @@ if menu == "新建报价":
         )
     
         st.markdown(
-            '<div class="pay-warning" style="text-align:center; font-size:1.02rem; font-weight:700; margin-bottom:10px;">⚠️ 本订单需分两笔支付</div>',
+            <div class="pay-warning" style="text-align:center;">⚠️ 本订单需分两笔金额支付</div>
             unsafe_allow_html=True
         )
     
         if freight_currency_mode == "人民币结算":
-            pay_warning_html = """
-    <div style="margin-top:8px; text-align:center; line-height:1.9;">
-        <div style="font-size:1.0rem; font-weight:600; color:#333;">
-            第一笔：请按日元金额完成支付
-        </div>
-        <div style="font-size:1.0rem; font-weight:700; color:#1677ff; margin-top:6px;">
-            第二笔：请按人民币金额通过微信转账支付
-        </div>
-    </div>
-    """
+            st.markdown(
+                '<div style="margin-top:8px; text-align:center; line-height:1.9;">'
+                '<div style="font-size:1.0rem; font-weight:600; color:#333;">第一笔：请按日元金额完成支付</div>'
+                '<div style="font-size:1.0rem; font-weight:700; color:#1677ff; margin-top:4px;">第二笔：请按人民币金额通过微信转账支付</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
         else:
-            pay_warning_html = """
-    <div style="margin-top:8px; font-size:1.0rem; font-weight:600; color:#333; line-height:1.8; text-align:center;">
-        请扫码并输入对应日元金额完成支付
-    </div>
-    """
-    
-        st.markdown(pay_warning_html, unsafe_allow_html=True)
+            st.markdown(
+                '<div style="margin-top:8px; font-size:1.0rem; font-weight:600; color:#333; line-height:1.8; text-align:center;">'
+                '请扫码并输入对应日元金额完成支付'
+                '</div>',
+                unsafe_allow_html=True
+            )
     
         st.markdown(
-            '<div style="color:#9a9a9a; font-size:0.76rem; margin-top:12px; line-height:1.5; text-align:center;">'
+            '<div style="color:#999; font-size:0.76rem; margin-top:10px; line-height:1.5; text-align:center;">'
             '请严格按照对应金额与币种完成支付'
             '</div>',
             unsafe_allow_html=True
         )
-        
-            st.markdown(
-                '<div style="color:#999; font-size:0.76rem; margin-top:10px; line-height:1.5; text-align:center;">'
-                '请严格按照对应金额与币种完成支付'
-                '</div>',
-                unsafe_allow_html=True
-            )
-        
-            st.markdown(
-                '</div>',
-                unsafe_allow_html=True
-            )
+    
+        st.markdown(
+            '</div>',
+            unsafe_allow_html=True
+        )
+    
+        st.markdown(
+            '</div>',
+            unsafe_allow_html=True
+        )
     
         st.markdown(
             '<div style="border: 1px solid #e9ecef; border-top:none; padding:16px 18px 14px 18px; border-radius: 0 0 15px 15px; text-align:center;">',
@@ -1782,7 +1776,7 @@ if menu == "新建报价":
                 <div class="guarantee-item">6. 人民币金额仅供参考，最终以支付时银行或支付平台实时汇率为准。</div>
             </div>
         """, unsafe_allow_html=True)
-
+    
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:18px;'></div>", unsafe_allow_html=True)

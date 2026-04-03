@@ -1713,9 +1713,7 @@ if menu == "新建报价":
     """
         else:
             qr_sub_text = """
-    <div style="font-size:0.95rem; font-weight:600; color:#333; line-height:1.8; text-align:center;">
-        请扫码并输入对应日元金额完成支付
-    </div>
+    <div style="font-size:0.95rem; font-weight:600; color:#333; line-height:1.8; text-align:center;">请扫码并输入对应日元金额完成支付</div>
     """
             
         st.markdown(f"""

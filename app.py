@@ -1698,29 +1698,31 @@ if menu == "新建报价":
                 <div class="guarantee-item">2. 如遇店铺暂时缺货，我方会第一时间与您沟通，可选择退款或等待补货后再安排下单。</div>
             </div>
         """, unsafe_allow_html=True)
-
+        
     with qr:
-        qr_sub_text = "请扫码并输入对应日元金额完成支付"
         if freight_currency_mode == "人民币结算":
-            qr_sub_text = "第一笔：请按日元金额完成支付<br>第二笔：请按人民币金额通过微信转账支付"
+            qr_sub_text = """
+    <div style="display:flex; flex-direction:column; gap:6px; align-items:center; margin-top:2px;">
+        <div style="font-size:0.95rem; font-weight:600; color:#333;">
+            💴 第一笔：请按日元金额完成支付
+        </div>
+        <div style="font-size:0.95rem; font-weight:700; color:#1677ff;">
+            💰 第二笔：请按人民币金额通过微信转账支付
+        </div>
+    </div>
+    """
+        else:
+            qr_sub_text = """
+    <div style="font-size:0.95rem; font-weight:600; color:#333; line-height:1.8; text-align:center;">
+        请扫码并输入对应日元金额完成支付
+    </div>
+    """
     
         st.markdown(f"""
             <div class="qr-instruction-header">
                 <div class="pay-warning">⚠️ 本订单需分两笔金额支付</div>
-                <div style="
-                    font-size:0.95rem;
-                    font-weight:600;
-                    color:#333;
-                    line-height:1.8;
-                    text-align:center;
-                ">
-                    {qr_sub_text}
-                </div>
-                <div style="
-                    color:#999;
-                    font-size:0.8rem;
-                    margin-top:4px;
-                ">
+                {qr_sub_text}
+                <div style="color:#999; font-size:0.8rem; margin-top:6px; line-height:1.6;">
                     请严格按照对应金额与币种完成支付
                 </div>
             </div>

@@ -1254,7 +1254,7 @@ div[data-testid="stDataEditor"] textarea {
 
 # --- 3. 菜单 ---
 with st.sidebar:
-    st.title("🐻 KDKM V11.9")
+    st.title("🐻 KDKM V2")
     if "menu_main" not in st.session_state:
         st.session_state["menu_main"] = "新建报价"
     menu = st.radio("导航", ["新建报价", "历史订单", "运营分析", "系统设置"], key="menu_main")

@@ -1702,12 +1702,20 @@ if menu == "新建报价":
     with qr:
         qr_sub_text = "请扫码并输入对应日元金额完成支付"
         if freight_currency_mode == "人民币结算":
-            qr_sub_text = "第一笔请按日元金额支付，第二笔请按人民币金额支付"
-
+            qr_sub_text = "第一笔：请按日元金额完成支付<br>第二笔：请按人民币金额通过微信转账支付"
+    
         st.markdown(f"""
             <div class="qr-instruction-header">
-                <div class="pay-warning">⚠️ 订单需分两笔金额支付</div>
-                <b>{qr_sub_text}</b>
+                <div class="pay-warning">⚠️ 本订单需分两笔完成支付</div>
+                <div style="
+                    font-weight:600;
+                    line-height:1.8;
+                    font-size:0.95rem;
+                    text-align:center;
+                    margin-top:6px;
+                ">
+                    {qr_sub_text}
+                </div>
             </div>
         """, unsafe_allow_html=True)
 

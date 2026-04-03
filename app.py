@@ -1712,22 +1712,22 @@ if menu == "新建报价":
     
         if freight_currency_mode == "人民币结算":
             st.markdown(
-                '<div style="font-size:0.95rem; font-weight:600; color:#333; line-height:1.8; text-align:center;">'
-                '💴 第一笔：请按日元金额完成支付<br>'
-                '<span style="font-weight:700; color:#1677ff;">💰 第二笔：请按人民币金额通过微信转账支付</span>'
+                '<div style="margin-top:8px; text-align:center; line-height:1.9;">'
+                '<div style="font-size:1.0rem; font-weight:600; color:#333;">第一笔：请按日元金额完成支付</div>'
+                '<div style="font-size:1.0rem; font-weight:700; color:#1677ff; margin-top:4px;">第二笔：请按人民币金额通过微信转账支付</div>'
                 '</div>',
                 unsafe_allow_html=True
             )
         else:
             st.markdown(
-                '<div style="font-size:0.95rem; font-weight:600; color:#333; line-height:1.8; text-align:center;">'
+                '<div style="margin-top:8px; font-size:1.0rem; font-weight:600; color:#333; line-height:1.8; text-align:center;">'
                 '请扫码并输入对应日元金额完成支付'
                 '</div>',
                 unsafe_allow_html=True
             )
     
         st.markdown(
-            '<div style="color:#999; font-size:0.8rem; margin-top:6px; line-height:1.6; text-align:center;">'
+            '<div style="color:#999; font-size:0.76rem; margin-top:10px; line-height:1.5; text-align:center;">'
             '请严格按照对应金额与币种完成支付'
             '</div>',
             unsafe_allow_html=True

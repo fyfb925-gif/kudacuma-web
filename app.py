@@ -1706,9 +1706,9 @@ if menu == "新建报价":
         )
     
         st.markdown(
-            <div class="pay-warning" style="text-align:center;">⚠️ 本订单需分两笔金额支付</div>
-            unsafe_allow_html=True
-        )
+            <div class="pay-warning" style="text-align:center; font-weight:700;">
+                ⚠️ 本订单需分两笔金额支付
+            </div>
     
         if freight_currency_mode == "人民币结算":
             st.markdown(

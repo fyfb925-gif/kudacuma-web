@@ -1717,14 +1717,12 @@ if menu == "新建报价":
         请扫码并输入对应日元金额完成支付
     </div>
     """
-    
+            
         st.markdown(f"""
             <div class="qr-instruction-header">
                 <div class="pay-warning">⚠️ 本订单需分两笔金额支付</div>
                 {qr_sub_text}
-                <div style="color:#999; font-size:0.8rem; margin-top:6px; line-height:1.6;">
-                    请严格按照对应金额与币种完成支付
-                </div>
+                <div style="color:#999; font-size:0.8rem; margin-top:6px; line-height:1.6;">请严格按照对应金额与币种完成支付</div>
             </div>
         """, unsafe_allow_html=True)
 

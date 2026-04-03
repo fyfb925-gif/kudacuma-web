@@ -1706,7 +1706,7 @@ if menu == "新建报价":
         )
     
         st.markdown(
-            '<div class="pay-warning">⚠️ 本订单需分两笔金额支付</div>',
+            '<div class="pay-warning" style="text-align:center; font-size:1.02rem; font-weight:700; margin-bottom:10px;">⚠️ 本订单需分两笔金额支付</div>',
             unsafe_allow_html=True
         )
     

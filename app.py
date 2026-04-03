@@ -12,7 +12,7 @@ from google.oauth2.service_account import Credentials
 from html2image import Html2Image
 
 # --- 1. 基础配置 ---
-st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V11.9", layout="wide")
+st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V2", layout="wide")
 
 DB_FILE = "kudacuma_history.csv"
 QR_DIR = "qr_codes"

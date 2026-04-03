@@ -517,7 +517,7 @@ def build_quote_export_html(
                 f"<div class='rmb-price-ref' style='color:#2C3E50;'>参考 RMB：{grand_total_rmb:,}</div>"
             )
 
-        qr_pay_sub = "第一笔请按日元金额支付<br>第二笔：请按人民币金额通过微信转账支付"
+        qr_pay_sub = "第一笔请按日元金额支付<br>第二笔直接微信按人民币金额转账"
     else:
         if freight_status == "已确认":
             payment2_html = (
@@ -1724,7 +1724,7 @@ if menu == "新建报价":
                     </div>
         
                     <div style="font-size:1.0rem; font-weight:700; color:#1677ff; margin-top:6px;">
-                        第二笔：请按人民币金额通过微信转账支付
+                        第二笔直接微信按人民币金额转账
                     </div>
                 </div>
         

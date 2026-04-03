@@ -517,7 +517,7 @@ def build_quote_export_html(
                 f"<div class='rmb-price-ref' style='color:#2C3E50;'>参考 RMB：{grand_total_rmb:,}</div>"
             )
 
-        qr_pay_sub = "第一笔请按日元金额支付<br>第二笔直接微信按人民币金额转账"
+        qr_pay_sub = "第一笔请按日元金额支付<br>第二笔：请按人民币金额通过微信转账支付"
     else:
         if freight_status == "已确认":
             payment2_html = (
@@ -882,7 +882,7 @@ def build_quote_export_html(
 
                     <div>
                         <div class="qr-instruction-header">
-                            <div class="pay-warning">⚠️ 订单需分两笔金额支付</div>
+                            <div class="pay-warning">⚠️ 本订单需分两笔支付</div>
                             <div class="pay-sub">{qr_pay_sub}</div>
                         </div>
 
@@ -1706,7 +1706,7 @@ if menu == "新建报价":
         )
     
         st.markdown(
-            '<div class="pay-warning" style="text-align:center; font-size:1.02rem; font-weight:700; margin-bottom:10px;">⚠️ 本订单需分两笔金额支付</div>',
+            '<div class="pay-warning" style="text-align:center; font-size:1.02rem; font-weight:700; margin-bottom:10px;">⚠️ 本订单需分两笔支付</div>',
             unsafe_allow_html=True
         )
     

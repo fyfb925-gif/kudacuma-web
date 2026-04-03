@@ -12,7 +12,7 @@ from google.oauth2.service_account import Credentials
 from html2image import Html2Image
 
 # --- 1. 基础配置 ---
-st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V11.8", layout="wide")
+st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V11.9", layout="wide")
 
 DB_FILE = "kudacuma_history.csv"
 QR_DIR = "qr_codes"
@@ -136,6 +136,13 @@ def safe_format_jpy(v):
         return "¥0"
 
 
+def format_rmb_text(v):
+    try:
+        return f"¥ {float(v):,.2f}"
+    except Exception:
+        return "¥ 0.00"
+
+
 def detect_browser_executable():
     """
     为 html2image 自动探测可用浏览器。
@@ -206,10 +213,12 @@ def build_order_detail_payload(
     service_pct,
     pay_fee_pct,
     freight_status,
+    freight_currency_mode,
     pay_method,
     w,
     u_q,
     u_c,
+    rmb_shipping_fee,
     other_c,
     manual_discount,
     discount_note,
@@ -238,10 +247,13 @@ def build_order_detail_payload(
         "service_pct": float(service_pct),
         "pay_fee_pct": float(pay_fee_pct),
         "freight_status": freight_status,
+        "freight_currency_mode": freight_currency_mode,
         "pay_method": pay_method,
         "weight": float(w),
         "quote_freight_unit": int(u_q),
         "cost_freight_unit": int(u_c),
+        "rmb_shipping_fee": float(rmb_shipping_fee),
+        "payment2_label": "包税运费",
         "other_cost": int(other_c),
         "manual_discount": int(manual_discount),
         "discount_note": str(discount_note).strip(),
@@ -261,10 +273,12 @@ def load_detail_as_new_draft(detail: dict):
     st.session_state["quote_service_pct_input"] = float(detail.get("service_pct", 7.0))
     st.session_state["quote_pay_fee_pct_input"] = float(detail.get("pay_fee_pct", 3.0))
     st.session_state["quote_freight_status_input"] = detail.get("freight_status", "已确认")
+    st.session_state["quote_freight_currency_mode_input"] = detail.get("freight_currency_mode", "日元结算")
     st.session_state["quote_pay_method_input"] = detail.get("pay_method", "微信支付")
     st.session_state["quote_weight_input"] = float(detail.get("weight", 1.0))
     st.session_state["quote_uq_input"] = int(detail.get("quote_freight_unit", 2200))
     st.session_state["quote_uc_input"] = int(detail.get("cost_freight_unit", 1400))
+    st.session_state["quote_rmb_shipping_input"] = float(detail.get("rmb_shipping_fee", 0.0))
     st.session_state["quote_other_c_input"] = int(detail.get("other_cost", 0))
     st.session_state["quote_manual_discount_input"] = int(detail.get("manual_discount", 0))
     st.session_state["quote_discount_note_input"] = detail.get("discount_note", "")
@@ -446,8 +460,10 @@ def build_quote_export_html(
     pay_fee_pct,
     disp_pay_fee,
     freight_status,
+    freight_currency_mode,
     w,
     ship_total_quote,
+    ship_total_quote_rmb,
     p2_total,
     grand_total_jpy,
     grand_total_rmb,
@@ -475,26 +491,76 @@ def build_quote_export_html(
             f"<div class='summary-row subtle'><span>调整说明</span><span>{html.escape(str(discount_note))}</span></div>"
         )
 
-    if freight_status == "已确认":
-        payment2_html = (
-            f"<div class='fee-row'><span>代购服务费 ({service_pct}%)</span><span>¥ {disp_service_fee:,}</span></div>"
-            f"<div class='fee-row'><span>跨境支付通道费 ({pay_fee_pct}%)</span><span>¥ {disp_pay_fee:,}</span></div>"
-            f"<div class='fee-row'><span>国际物流费用 ({w:.1f} KG)</span><span>¥ {ship_total_quote:,}</span></div>"
-            f"<div class='total-label-jpy'>¥ {p2_total + ship_total_quote:,} JPY</div>"
-            f"<div class='rmb-price-ref'>参考 RMB：{round((p2_total + ship_total_quote) * rate, 2):,}</div>"
-            f"<div class='rmb-note'>※ 实际人民币金额按支付时即时汇率折算</div>"
-        )
-        grand_title = "两笔支付合计"
+    if freight_currency_mode == "人民币结算":
+        if freight_status == "已确认":
+            payment2_html = (
+                f"<div class='fee-row'><span>包税运费</span><span>{format_rmb_text(ship_total_quote_rmb)} RMB</span></div>"
+                f"<div class='total-label-jpy'>{format_rmb_text(ship_total_quote_rmb)} RMB</div>"
+                f"<div class='rmb-note'>※ 本项需按人民币金额支付</div>"
+            )
+
+            grand_total_html = (
+                f"{grand_discount_html}"
+                f"<div class='summary-row strong'><span>第一笔支付（商品订购款）</span><span>¥ {payment1_jpy:,} JPY</span></div>"
+                f"<div class='summary-row strong'><span>第二笔支付（包税运费）</span><span>{format_rmb_text(ship_total_quote_rmb)} RMB</span></div>"
+            )
+        else:
+            payment2_html = (
+                f"<div class='fee-row'><span>包税运费</span><span>到货后结算</span></div>"
+                f"<div class='rmb-note'>※ 包税运费将在商品到货后按实际情况确认</div>"
+            )
+
+            grand_total_html = (
+                f"{grand_discount_html}"
+                f"<div class='summary-row strong'><span>当前已确认金额（第一笔）</span><span>¥ {grand_total_jpy:,} JPY</span></div>"
+                f"<div class='summary-row subtle'><span>第二笔支付（包税运费）</span><span>待确认</span></div>"
+                f"<div class='rmb-price-ref' style='color:#2C3E50;'>参考 RMB：{grand_total_rmb:,}</div>"
+            )
+
+        qr_pay_sub = "第一笔请按日元金额支付，第二笔请按人民币金额支付"
     else:
-        payment2_html = (
-            f"<div class='fee-row'><span>代购服务费 ({service_pct}%)</span><span>¥ {disp_service_fee:,}</span></div>"
-            f"<div class='fee-row'><span>跨境支付通道费 ({pay_fee_pct}%)</span><span>¥ {disp_pay_fee:,}</span></div>"
-            f"<div class='fee-row'><span>国际物流费用</span><span>到货后结算</span></div>"
-            f"<div class='total-label-jpy'>¥ {p2_total:,} JPY</div>"
-            f"<div class='rmb-price-ref'>参考 RMB：{round(p2_total * rate, 2):,}</div>"
-            f"<div class='rmb-note'>※ 国际物流费用将在商品到货后按实际重量结算</div>"
-        )
-        grand_title = "当前已确认金额"
+        if freight_status == "已确认":
+            payment2_html = (
+                f"<div class='fee-row'><span>代购服务费 ({service_pct}%)</span><span>¥ {disp_service_fee:,}</span></div>"
+                f"<div class='fee-row'><span>跨境支付通道费 ({pay_fee_pct}%)</span><span>¥ {disp_pay_fee:,}</span></div>"
+                f"<div class='fee-row'><span>国际物流费用 ({w:.1f} KG)</span><span>¥ {ship_total_quote:,}</span></div>"
+                f"<div class='total-label-jpy'>¥ {p2_total + ship_total_quote:,} JPY</div>"
+                f"<div class='rmb-price-ref'>参考 RMB：{round((p2_total + ship_total_quote) * rate, 2):,}</div>"
+                f"<div class='rmb-note'>※ 实际人民币金额按支付时即时汇率折算</div>"
+            )
+
+            grand_total_html = (
+                f"{grand_discount_html}"
+                f"<div class='grand-row'>"
+                f"<span class='grand-row-title'>两笔支付合计</span>"
+                f"<div style='text-align:right;'>"
+                f"<div class='total-label-jpy' style='color:#2C3E50; margin-top:0;'>¥ {grand_total_jpy:,} JPY</div>"
+                f"<div class='rmb-price-ref' style='color:#2C3E50;'>参考 RMB：{grand_total_rmb:,}</div>"
+                f"</div>"
+                f"</div>"
+            )
+        else:
+            payment2_html = (
+                f"<div class='fee-row'><span>代购服务费 ({service_pct}%)</span><span>¥ {disp_service_fee:,}</span></div>"
+                f"<div class='fee-row'><span>跨境支付通道费 ({pay_fee_pct}%)</span><span>¥ {disp_pay_fee:,}</span></div>"
+                f"<div class='fee-row'><span>国际物流费用</span><span>到货后结算</span></div>"
+                f"<div class='total-label-jpy'>¥ {p2_total:,} JPY</div>"
+                f"<div class='rmb-price-ref'>参考 RMB：{round(p2_total * rate, 2):,}</div>"
+                f"<div class='rmb-note'>※ 国际物流费用将在商品到货后按实际重量结算</div>"
+            )
+
+            grand_total_html = (
+                f"{grand_discount_html}"
+                f"<div class='grand-row'>"
+                f"<span class='grand-row-title'>当前已确认金额</span>"
+                f"<div style='text-align:right;'>"
+                f"<div class='total-label-jpy' style='color:#2C3E50; margin-top:0;'>¥ {grand_total_jpy:,} JPY</div>"
+                f"<div class='rmb-price-ref' style='color:#2C3E50;'>参考 RMB：{grand_total_rmb:,}</div>"
+                f"</div>"
+                f"</div>"
+            )
+
+        qr_pay_sub = "请扫码并输入对应日元金额完成支付"
 
     qr_src = Path(qr_abs_path).resolve().as_uri() if qr_abs_path and os.path.exists(qr_abs_path) else ""
 
@@ -715,6 +781,7 @@ def build_quote_export_html(
             font-size: 25px;
             font-weight: 700;
             color: #333;
+            line-height: 1.5;
         }}
 
         .qr-box {{
@@ -802,14 +869,7 @@ def build_quote_export_html(
                         <div class="left-card">
                             <div class="payment-header" style="background:#2C3E50;">🧾 订单总计 (Grand Total)</div>
                             <div class="detail-box" style="border-left:5px solid #2C3E50; background:#f8f9fa;">
-                                {grand_discount_html}
-                                <div class="grand-row">
-                                    <span class="grand-row-title">{grand_title}</span>
-                                    <div style="text-align:right;">
-                                        <div class="total-label-jpy" style="color:#2C3E50; margin-top:0;">¥ {grand_total_jpy:,} JPY</div>
-                                        <div class="rmb-price-ref" style="color:#2C3E50;">参考 RMB：{grand_total_rmb:,}</div>
-                                    </div>
-                                </div>
+                                {grand_total_html}
                             </div>
                         </div>
 
@@ -823,7 +883,7 @@ def build_quote_export_html(
                     <div>
                         <div class="qr-instruction-header">
                             <div class="pay-warning">⚠️ 订单需分两笔金额支付</div>
-                            <div class="pay-sub">请扫码并输入对应日元金额完成支付</div>
+                            <div class="pay-sub">{qr_pay_sub}</div>
                         </div>
 
                         <div class="qr-box">
@@ -871,8 +931,10 @@ def export_quote_png(
     pay_fee_pct,
     disp_pay_fee,
     freight_status,
+    freight_currency_mode,
     w,
     ship_total_quote,
+    ship_total_quote_rmb,
     p2_total,
     grand_total_jpy,
     grand_total_rmb,
@@ -900,8 +962,10 @@ def export_quote_png(
         pay_fee_pct=pay_fee_pct,
         disp_pay_fee=disp_pay_fee,
         freight_status=freight_status,
+        freight_currency_mode=freight_currency_mode,
         w=w,
         ship_total_quote=ship_total_quote,
+        ship_total_quote_rmb=ship_total_quote_rmb,
         p2_total=p2_total,
         grand_total_jpy=grand_total_jpy,
         grand_total_rmb=grand_total_rmb,
@@ -913,9 +977,9 @@ def export_quote_png(
 
     if browser_executable:
         hti = Html2Image(
-    output_path=EXPORT_DIR,
-    browser_executable="/usr/bin/chromium"
-)
+            output_path=EXPORT_DIR,
+            browser_executable=browser_executable
+        )
     else:
         # 让 html2image 自己尝试；如果云端无浏览器，会在外层被捕获并提示
         hti = Html2Image(output_path=EXPORT_DIR)
@@ -1190,7 +1254,7 @@ div[data-testid="stDataEditor"] textarea {
 
 # --- 3. 菜单 ---
 with st.sidebar:
-    st.title("🐻 KDKM V11.8")
+    st.title("🐻 KDKM V11.9")
     if "menu_main" not in st.session_state:
         st.session_state["menu_main"] = "新建报价"
     menu = st.radio("导航", ["新建报价", "历史订单", "运营分析", "系统设置"], key="menu_main")
@@ -1200,6 +1264,7 @@ with st.sidebar:
 if menu == "新建报价":
     valid_time_options = ["48 Hours", "24 Hours", "3 Days"]
     freight_options = ["已确认", "待确认"]
+    freight_currency_mode_options = ["日元结算", "人民币结算"]
     qr_list = [f.replace(".png", "") for f in os.listdir(QR_DIR) if f.endswith(".png")]
     pay_method_options = ["微信支付"] + [x for x in qr_list if x != "微信支付"]
 
@@ -1211,10 +1276,12 @@ if menu == "新建报价":
         "quote_service_pct_input": 7.0,
         "quote_pay_fee_pct_input": 3.0,
         "quote_freight_status_input": "已确认",
+        "quote_freight_currency_mode_input": "日元结算",
         "quote_pay_method_input": "微信支付",
         "quote_weight_input": 1.0,
         "quote_uq_input": 2200,
         "quote_uc_input": 1400,
+        "quote_rmb_shipping_input": 0.0,
         "quote_other_c_input": 0,
         "quote_manual_discount_input": 0,
         "quote_discount_note_input": "",
@@ -1232,6 +1299,8 @@ if menu == "新建报价":
         st.session_state["quote_valid_time_input"] = "48 Hours"
     if st.session_state["quote_freight_status_input"] not in freight_options:
         st.session_state["quote_freight_status_input"] = "已确认"
+    if st.session_state["quote_freight_currency_mode_input"] not in freight_currency_mode_options:
+        st.session_state["quote_freight_currency_mode_input"] = "日元结算"
     if st.session_state["quote_pay_method_input"] not in pay_method_options:
         st.session_state["quote_pay_method_input"] = "微信支付"
 
@@ -1242,11 +1311,12 @@ if menu == "新建报价":
         valid_time = c3.selectbox("有效期", valid_time_options, key="quote_valid_time_input")
         quote_id = c4.text_input("单号", key="quote_id_input")
 
-        d1, d2, d3, d4 = st.columns(4)
+        d1, d2, d3, d4, d5 = st.columns(5)
         service_pct = d1.number_input("服务费 %", min_value=0.0, step=0.5, key="quote_service_pct_input")
         pay_fee_pct = d2.number_input("手续费 %", min_value=0.0, step=0.1, key="quote_pay_fee_pct_input")
         freight_status = d3.selectbox("运费状态", freight_options, key="quote_freight_status_input")
-        pay_method = d4.selectbox("收款通道", pay_method_options, key="quote_pay_method_input")
+        freight_currency_mode = d4.selectbox("物流结算方式", freight_currency_mode_options, key="quote_freight_currency_mode_input")
+        pay_method = d5.selectbox("收款通道", pay_method_options, key="quote_pay_method_input")
 
     st.markdown('<div class="control-title">📦 商品录入与成本控制</div>', unsafe_allow_html=True)
     f1, f2, f3, f4, f5 = st.columns(5)
@@ -1269,8 +1339,15 @@ if menu == "新建报价":
     w = f1.number_input("重量 (KG)", min_value=0.0, step=0.1, key="quote_weight_input")
     u_q = f2.number_input("报价运费 (JPY)", min_value=0, step=1, key="quote_uq_input")
     u_c = f3.number_input("成本运费 (JPY)", min_value=0, step=1, key="quote_uc_input")
-    other_c = f4.number_input("额外杂费", min_value=0, step=100, key="quote_other_c_input")
-    manual_discount = f5.number_input("金额调整", min_value=0, step=100, key="quote_manual_discount_input")
+
+    if freight_currency_mode == "人民币结算":
+        rmb_shipping_fee = f4.number_input("包税运费 (RMB)", min_value=0.0, step=10.0, format="%.2f", key="quote_rmb_shipping_input")
+        manual_discount = f5.number_input("金额调整", min_value=0, step=100, key="quote_manual_discount_input")
+        other_c = st.number_input("额外杂费", min_value=0, step=100, key="quote_other_c_input")
+    else:
+        other_c = f4.number_input("额外杂费", min_value=0, step=100, key="quote_other_c_input")
+        manual_discount = f5.number_input("金额调整", min_value=0, step=100, key="quote_manual_discount_input")
+        rmb_shipping_fee = float(st.session_state.get("quote_rmb_shipping_input", 0.0))
 
     discount_note = st.text_input("调整理由（可选）", key="quote_discount_note_input")
 
@@ -1278,6 +1355,13 @@ if menu == "新建报价":
     ship_total_cost = int(w * u_c)
 
     st.info("💡 可在【折扣】列为不同商品单独设置折扣，100 即为不打折。按 Tab 键可更快录入。")
+
+    if freight_currency_mode == "人民币结算" and freight_status == "已确认":
+        st.caption(
+            f"当前人民币运费：{format_rmb_text(rmb_shipping_fee)} RMB ｜ 参考折算约：¥ {int(round(rmb_shipping_fee / rate)):,} JPY"
+            if rate > 0 else
+            f"当前人民币运费：{format_rmb_text(rmb_shipping_fee)} RMB"
+        )
 
     df_input = st.data_editor(
         pd.DataFrame(st.session_state["items_editor_seed"]),
@@ -1315,52 +1399,96 @@ if menu == "新建报价":
     p_cost = int((valid_df["数量"] * valid_df["成本"]).sum()) if not valid_df.empty else 0
 
     payment1_jpy = p_rev
-    disp_service_fee = int(p_rev * (service_pct / 100))
-    disp_pay_fee = int((p_rev + disp_service_fee) * (pay_fee_pct / 100))
-    p2_total = disp_service_fee + disp_pay_fee
 
-    if freight_status == "已确认":
-        grand_total_jpy = p_rev + p2_total + ship_total_quote - manual_discount
+    if freight_currency_mode == "人民币结算":
+        disp_service_fee = 0
+        disp_pay_fee = 0
+        p2_total = 0
+        ship_total_quote_rmb = round(rmb_shipping_fee, 2)
+        ship_total_quote_jpy_equivalent = int(round(rmb_shipping_fee / rate)) if (rate > 0 and freight_status == "已确认") else 0
+
+        if freight_status == "已确认":
+            grand_total_jpy = p_rev + ship_total_quote_jpy_equivalent - manual_discount
+        else:
+            grand_total_jpy = p_rev - manual_discount
     else:
-        grand_total_jpy = p_rev + p2_total - manual_discount
+        disp_service_fee = int(p_rev * (service_pct / 100))
+        disp_pay_fee = int((p_rev + disp_service_fee) * (pay_fee_pct / 100))
+        p2_total = disp_service_fee + disp_pay_fee
+        ship_total_quote_rmb = round(ship_total_quote * rate, 2)
+
+        if freight_status == "已确认":
+            grand_total_jpy = p_rev + p2_total + ship_total_quote - manual_discount
+        else:
+            grand_total_jpy = p_rev + p2_total - manual_discount
 
     grand_total_jpy = max(0, grand_total_jpy)
-
     grand_total_rmb = round(grand_total_jpy * rate, 2)
 
     with st.sidebar:
         loss_gap = int(grand_total_jpy * 0.02) if grand_total_jpy > 0 else 0
-        net_profit_jpy = (
-            (p_rev - p_cost)
-            + (ship_total_quote - ship_total_cost)
-            + disp_service_fee
-            + disp_pay_fee
-            - loss_gap
-            - other_c
-            - manual_discount
-        )
-        net_profit_rmb = round(net_profit_jpy * rate, 2)
 
-        st.markdown(f"""
-            <div class="profit-panel">
-                <div style="font-weight:600; margin-bottom:12px; border-bottom:1px solid #3d4256; padding-bottom:5px;">📊 收益透视图</div>
-                <div class="profit-row"><span>商品利</span><span>+¥{p_rev - p_cost:,}</span></div>
-                <div class="profit-row"><span>代购费</span><span>+¥{disp_service_fee:,}</span></div>
-                <div class="profit-row"><span>运费差</span><span>+¥{ship_total_quote - ship_total_cost:,}</span></div>
-                <div class="profit-row"><span>通道差</span><span>+¥{disp_pay_fee:,}</span></div>
-                <div class="profit-row" style="color:#f39c12;"><span>金额调整</span><span>-¥{manual_discount:,}</span></div>
-                <div class="profit-row" style="color:#e74c3c;"><span>结算损耗(2%)</span><span>-¥{loss_gap:,}</span></div>
-                <div class="profit-row" style="color:#f39c12;"><span>额外杂费</span><span>-¥{other_c:,}</span></div>
-                <hr style="margin:10px 0; border-top:1px solid #3d4256;">
-                <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-                    <span style="font-weight:600; padding-bottom: 5px;">预估净利</span>
-                    <div style="text-align:right;">
-                        <div style="font-size:1.28rem; font-weight:700; color:#27ae60;">¥{net_profit_jpy:,}</div>
-                        <div style="font-size:0.86rem; color:#f39c12; font-weight:600; margin-top:2px;">≈ RMB {net_profit_rmb:,}</div>
+        if freight_currency_mode == "人民币结算":
+            freight_profit_jpy = (ship_total_quote_jpy_equivalent - ship_total_cost) if freight_status == "已确认" else 0
+            net_profit_jpy = (
+                (p_rev - p_cost)
+                + freight_profit_jpy
+                - loss_gap
+                - other_c
+                - manual_discount
+            )
+            net_profit_rmb = round(net_profit_jpy * rate, 2)
+
+            st.markdown(f"""
+                <div class="profit-panel">
+                    <div style="font-weight:600; margin-bottom:12px; border-bottom:1px solid #3d4256; padding-bottom:5px;">📊 收益透视图</div>
+                    <div class="profit-row"><span>商品利</span><span>+¥{p_rev - p_cost:,}</span></div>
+                    <div class="profit-row"><span>包税运费差</span><span>+¥{freight_profit_jpy:,}</span></div>
+                    <div class="profit-row" style="color:#f39c12;"><span>金额调整</span><span>-¥{manual_discount:,}</span></div>
+                    <div class="profit-row" style="color:#e74c3c;"><span>结算损耗(2%)</span><span>-¥{loss_gap:,}</span></div>
+                    <div class="profit-row" style="color:#f39c12;"><span>额外杂费</span><span>-¥{other_c:,}</span></div>
+                    <hr style="margin:10px 0; border-top:1px solid #3d4256;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                        <span style="font-weight:600; padding-bottom: 5px;">预估净利</span>
+                        <div style="text-align:right;">
+                            <div style="font-size:1.28rem; font-weight:700; color:#27ae60;">¥{net_profit_jpy:,}</div>
+                            <div style="font-size:0.86rem; color:#f39c12; font-weight:600; margin-top:2px;">≈ RMB {net_profit_rmb:,}</div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+        else:
+            net_profit_jpy = (
+                (p_rev - p_cost)
+                + (ship_total_quote - ship_total_cost)
+                + disp_service_fee
+                + disp_pay_fee
+                - loss_gap
+                - other_c
+                - manual_discount
+            )
+            net_profit_rmb = round(net_profit_jpy * rate, 2)
+
+            st.markdown(f"""
+                <div class="profit-panel">
+                    <div style="font-weight:600; margin-bottom:12px; border-bottom:1px solid #3d4256; padding-bottom:5px;">📊 收益透视图</div>
+                    <div class="profit-row"><span>商品利</span><span>+¥{p_rev - p_cost:,}</span></div>
+                    <div class="profit-row"><span>代购费</span><span>+¥{disp_service_fee:,}</span></div>
+                    <div class="profit-row"><span>运费差</span><span>+¥{ship_total_quote - ship_total_cost:,}</span></div>
+                    <div class="profit-row"><span>通道差</span><span>+¥{disp_pay_fee:,}</span></div>
+                    <div class="profit-row" style="color:#f39c12;"><span>金额调整</span><span>-¥{manual_discount:,}</span></div>
+                    <div class="profit-row" style="color:#e74c3c;"><span>结算损耗(2%)</span><span>-¥{loss_gap:,}</span></div>
+                    <div class="profit-row" style="color:#f39c12;"><span>额外杂费</span><span>-¥{other_c:,}</span></div>
+                    <hr style="margin:10px 0; border-top:1px solid #3d4256;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                        <span style="font-weight:600; padding-bottom: 5px;">预估净利</span>
+                        <div style="text-align:right;">
+                            <div style="font-size:1.28rem; font-weight:700; color:#27ae60;">¥{net_profit_jpy:,}</div>
+                            <div style="font-size:0.86rem; color:#f39c12; font-weight:600; margin-top:2px;">≈ RMB {net_profit_rmb:,}</div>
+                        </div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
     st.markdown(f"""
     <div class="quote-container">
@@ -1457,31 +1585,50 @@ if menu == "新建报价":
             unsafe_allow_html=True
         )
 
-        if freight_status == "已确认":
-            second_total = p2_total + ship_total_quote
-            st.markdown(
-                f"<div class='detail-box' style='border-left:4px solid #3498DB;'>"
-                f"<div class='fee-row'><span>代购服务费 ({service_pct}%)</span><span>¥ {disp_service_fee:,}</span></div>"
-                f"<div class='fee-row'><span>跨境支付通道费 ({pay_fee_pct}%)</span><span>¥ {disp_pay_fee:,}</span></div>"
-                f"<div class='fee-row'><span>国际物流费用 ({w:.1f} KG)</span><span>¥ {ship_total_quote:,}</span></div>"
-                f"<div class='total-label-jpy'>¥ {second_total:,} JPY</div>"
-                f"<div class='rmb-price-ref'>参考 RMB：{round(second_total * rate, 2):,}</div>"
-                f"<div class='rmb-note'>※ 实际人民币金额按支付时即时汇率折算</div>"
-                f"</div>",
-                unsafe_allow_html=True
-            )
+        if freight_currency_mode == "人民币结算":
+            if freight_status == "已确认":
+                st.markdown(
+                    f"<div class='detail-box' style='border-left:4px solid #3498DB;'>"
+                    f"<div class='fee-row'><span>包税运费</span><span>{format_rmb_text(ship_total_quote_rmb)} RMB</span></div>"
+                    f"<div class='total-label-jpy'>{format_rmb_text(ship_total_quote_rmb)} RMB</div>"
+                    f"<div class='rmb-note'>※ 本项需按人民币金额支付</div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f"<div class='detail-box' style='border-left:4px solid #3498DB;'>"
+                    f"<div class='fee-row'><span>包税运费</span><span>到货后结算</span></div>"
+                    f"<div class='rmb-note'>※ 包税运费将在商品到货后按实际情况确认</div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
         else:
-            st.markdown(
-                f"<div class='detail-box' style='border-left:4px solid #3498DB;'>"
-                f"<div class='fee-row'><span>代购服务费 ({service_pct}%)</span><span>¥ {disp_service_fee:,}</span></div>"
-                f"<div class='fee-row'><span>跨境支付通道费 ({pay_fee_pct}%)</span><span>¥ {disp_pay_fee:,}</span></div>"
-                f"<div class='fee-row'><span>国际物流费用</span><span>到货后结算</span></div>"
-                f"<div class='total-label-jpy'>¥ {p2_total:,} JPY</div>"
-                f"<div class='rmb-price-ref'>参考 RMB：{round(p2_total * rate, 2):,}</div>"
-                f"<div class='rmb-note'>※ 国际物流费用将在商品到货后按实际重量结算</div>"
-                f"</div>",
-                unsafe_allow_html=True
-            )
+            if freight_status == "已确认":
+                second_total = p2_total + ship_total_quote
+                st.markdown(
+                    f"<div class='detail-box' style='border-left:4px solid #3498DB;'>"
+                    f"<div class='fee-row'><span>代购服务费 ({service_pct}%)</span><span>¥ {disp_service_fee:,}</span></div>"
+                    f"<div class='fee-row'><span>跨境支付通道费 ({pay_fee_pct}%)</span><span>¥ {disp_pay_fee:,}</span></div>"
+                    f"<div class='fee-row'><span>国际物流费用 ({w:.1f} KG)</span><span>¥ {ship_total_quote:,}</span></div>"
+                    f"<div class='total-label-jpy'>¥ {second_total:,} JPY</div>"
+                    f"<div class='rmb-price-ref'>参考 RMB：{round(second_total * rate, 2):,}</div>"
+                    f"<div class='rmb-note'>※ 实际人民币金额按支付时即时汇率折算</div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f"<div class='detail-box' style='border-left:4px solid #3498DB;'>"
+                    f"<div class='fee-row'><span>代购服务费 ({service_pct}%)</span><span>¥ {disp_service_fee:,}</span></div>"
+                    f"<div class='fee-row'><span>跨境支付通道费 ({pay_fee_pct}%)</span><span>¥ {disp_pay_fee:,}</span></div>"
+                    f"<div class='fee-row'><span>国际物流费用</span><span>到货后结算</span></div>"
+                    f"<div class='total-label-jpy'>¥ {p2_total:,} JPY</div>"
+                    f"<div class='rmb-price-ref'>参考 RMB：{round(p2_total * rate, 2):,}</div>"
+                    f"<div class='rmb-note'>※ 国际物流费用将在商品到货后按实际重量结算</div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
 
         st.markdown(
             '<div class="payment-header" style="background-color: #2C3E50; margin-top:20px;">🧾 订单总计 (Grand Total)</div>',
@@ -1498,30 +1645,51 @@ if menu == "新建报价":
                 f"<div class='summary-row subtle'><span>调整说明</span><span>{html.escape(str(discount_note))}</span></div>"
             )
 
-        if freight_status == "已确认":
-            st.markdown(
-                f"<div class='detail-box' style='border-left:4px solid #2C3E50; background-color:#f8f9fa;'>"
-                f"{grand_discount_preview}"
-                f"<div style='display:flex; justify-content:space-between; align-items:center;'>"
-                f"<span class='grand-row-title'>两笔支付合计</span>"
-                f"<div style='text-align:right;'>"
-                f"<div class='total-label-jpy' style='color:#2C3E50; margin-top:0;'>¥ {grand_total_jpy:,} JPY</div>"
-                f"<div class='rmb-price-ref' style='color:#2C3E50;'>参考 RMB：{grand_total_rmb:,}</div>"
-                f"</div></div></div>",
-                unsafe_allow_html=True
-            )
+        if freight_currency_mode == "人民币结算":
+            if freight_status == "已确认":
+                st.markdown(
+                    f"<div class='detail-box' style='border-left:4px solid #2C3E50; background-color:#f8f9fa;'>"
+                    f"{grand_discount_preview}"
+                    f"<div class='summary-row strong'><span>第一笔支付（商品订购款）</span><span>¥ {payment1_jpy:,} JPY</span></div>"
+                    f"<div class='summary-row strong'><span>第二笔支付（包税运费）</span><span>{format_rmb_text(ship_total_quote_rmb)} RMB</span></div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f"<div class='detail-box' style='border-left:4px solid #2C3E50; background-color:#f8f9fa;'>"
+                    f"{grand_discount_preview}"
+                    f"<div class='summary-row strong'><span>当前已确认金额（第一笔）</span><span>¥ {grand_total_jpy:,} JPY</span></div>"
+                    f"<div class='summary-row subtle'><span>第二笔支付（包税运费）</span><span>待确认</span></div>"
+                    f"<div class='rmb-price-ref' style='color:#2C3E50;'>参考 RMB：{grand_total_rmb:,}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
         else:
-            st.markdown(
-                f"<div class='detail-box' style='border-left:4px solid #2C3E50; background-color:#f8f9fa;'>"
-                f"{grand_discount_preview}"
-                f"<div style='display:flex; justify-content:space-between; align-items:center;'>"
-                f"<span class='grand-row-title'>当前已确认金额</span>"
-                f"<div style='text-align:right;'>"
-                f"<div class='total-label-jpy' style='color:#2C3E50; margin-top:0;'>¥ {grand_total_jpy:,} JPY</div>"
-                f"<div class='rmb-price-ref' style='color:#2C3E50;'>参考 RMB：{grand_total_rmb:,}</div>"
-                f"</div></div></div>",
-                unsafe_allow_html=True
-            )
+            if freight_status == "已确认":
+                st.markdown(
+                    f"<div class='detail-box' style='border-left:4px solid #2C3E50; background-color:#f8f9fa;'>"
+                    f"{grand_discount_preview}"
+                    f"<div style='display:flex; justify-content:space-between; align-items:center;'>"
+                    f"<span class='grand-row-title'>两笔支付合计</span>"
+                    f"<div style='text-align:right;'>"
+                    f"<div class='total-label-jpy' style='color:#2C3E50; margin-top:0;'>¥ {grand_total_jpy:,} JPY</div>"
+                    f"<div class='rmb-price-ref' style='color:#2C3E50;'>参考 RMB：{grand_total_rmb:,}</div>"
+                    f"</div></div></div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f"<div class='detail-box' style='border-left:4px solid #2C3E50; background-color:#f8f9fa;'>"
+                    f"{grand_discount_preview}"
+                    f"<div style='display:flex; justify-content:space-between; align-items:center;'>"
+                    f"<span class='grand-row-title'>当前已确认金额</span>"
+                    f"<div style='text-align:right;'>"
+                    f"<div class='total-label-jpy' style='color:#2C3E50; margin-top:0;'>¥ {grand_total_jpy:,} JPY</div>"
+                    f"<div class='rmb-price-ref' style='color:#2C3E50;'>参考 RMB：{grand_total_rmb:,}</div>"
+                    f"</div></div></div>",
+                    unsafe_allow_html=True
+                )
 
         st.markdown("""
             <div class="service-guarantee">
@@ -1532,10 +1700,14 @@ if menu == "新建报价":
         """, unsafe_allow_html=True)
 
     with qr:
-        st.markdown("""
+        qr_sub_text = "请扫码并输入对应日元金额完成支付"
+        if freight_currency_mode == "人民币结算":
+            qr_sub_text = "第一笔请按日元金额支付，第二笔请按人民币金额支付"
+
+        st.markdown(f"""
             <div class="qr-instruction-header">
                 <div class="pay-warning">⚠️ 订单需分两笔金额支付</div>
-                <b>请扫码并输入对应日元金额完成支付</b>
+                <b>{qr_sub_text}</b>
             </div>
         """, unsafe_allow_html=True)
 
@@ -1595,10 +1767,12 @@ if menu == "新建报价":
                     service_pct=service_pct,
                     pay_fee_pct=pay_fee_pct,
                     freight_status=freight_status,
+                    freight_currency_mode=freight_currency_mode,
                     pay_method=pay_method,
                     w=w,
                     u_q=u_q,
                     u_c=u_c,
+                    rmb_shipping_fee=rmb_shipping_fee,
                     other_c=other_c,
                     manual_discount=manual_discount,
                     discount_note=discount_note,
@@ -1643,10 +1817,12 @@ if menu == "新建报价":
                     service_pct=service_pct,
                     pay_fee_pct=pay_fee_pct,
                     freight_status=freight_status,
+                    freight_currency_mode=freight_currency_mode,
                     pay_method=pay_method,
                     w=w,
                     u_q=u_q,
                     u_c=u_c,
+                    rmb_shipping_fee=rmb_shipping_fee,
                     other_c=other_c,
                     manual_discount=manual_discount,
                     discount_note=discount_note,
@@ -1695,8 +1871,10 @@ if menu == "新建报价":
                     pay_fee_pct=pay_fee_pct,
                     disp_pay_fee=disp_pay_fee,
                     freight_status=freight_status,
+                    freight_currency_mode=freight_currency_mode,
                     w=w,
                     ship_total_quote=ship_total_quote,
+                    ship_total_quote_rmb=ship_total_quote_rmb,
                     p2_total=p2_total,
                     grand_total_jpy=grand_total_jpy,
                     grand_total_rmb=grand_total_rmb,

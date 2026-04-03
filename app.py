@@ -1705,18 +1705,33 @@ if menu == "新建报价":
             qr_sub_text = "第一笔：请按日元金额完成支付<br>第二笔：请按人民币金额通过微信转账支付"
     
         st.markdown(f"""
-            <div class="qr-instruction-header">
-                <div class="pay-warning">⚠️ 本订单需分两笔完成支付</div>
-                <div style="
-                    font-weight:600;
-                    line-height:1.8;
-                    font-size:0.95rem;
-                    text-align:center;
-                    margin-top:6px;
-                ">
-                    {qr_sub_text}
-                </div>
+        <div style="
+            background:#fff;
+            padding:14px;
+            border-radius:10px;
+            border:1px solid #eee;
+            text-align:center;
+        ">
+            <div style="color:#ff4d4f; font-weight:700;">
+                ⚠️ 本订单需分两笔完成支付
             </div>
+        
+            <div style="
+                margin-top:8px;
+                font-weight:600;
+                line-height:1.8;
+            ">
+                {qr_sub_text}
+            </div>
+        
+            <div style="
+                color:#999;
+                font-size:0.8rem;
+                margin-top:6px;
+            ">
+                请严格按照对应金额与币种完成支付
+            </div>
+        </div>
         """, unsafe_allow_html=True)
 
         st.markdown(

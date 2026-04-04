@@ -2162,13 +2162,13 @@ elif menu == "运营分析":
         total_orders = len(df)
         total_revenue = df["总收入"].sum()
         total_profit = df["总利润"].sum()
-        avg_margin = df["利润率"].mean() if total_orders else 0
+        real_margin = (total_profit / total_revenue * 100) if total_revenue else 0
         avg_order_value = df["总收入"].mean() if total_orders else 0
-
+        
         month_orders = len(df_month)
         month_revenue = df_month["总收入"].sum()
         month_profit = df_month["总利润"].sum()
-        month_avg_margin = df_month["利润率"].mean() if month_orders else 0
+        month_real_margin = (month_profit / month_revenue * 100) if month_revenue else 0
 
         a1, a2, a3, a4 = st.columns(4)
         a1.metric(
@@ -2187,9 +2187,9 @@ elif menu == "运营分析":
             help=f"完整金额：{format_jpy(total_profit)}"
         )
         a4.metric(
-            "平均利润率",
-            f"{avg_margin:.2f}%",
-            help=f"完整数值：{avg_margin:.2f}%"
+            "真实利润率",
+            f"{real_margin:.2f}%",
+            help=f"总利润 ÷ 总销售额 = {real_margin:.2f}%"
         )
         
         b1, b2, b3, b4 = st.columns(4)
@@ -2214,7 +2214,7 @@ elif menu == "运营分析":
             help=f"完整金额：{format_jpy(avg_order_value)}"
         )
 
-        st.caption(f"本月平均利润率：{month_avg_margin:.2f}%")
+        st.caption(f"本月真实利润率：{month_avg_margin:.2f}%")
         st.markdown("---")
 
         st.markdown("### 最近30天趋势")

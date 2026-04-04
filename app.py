@@ -973,13 +973,10 @@ def export_quote_png(
     )
 
     import time
+        
+    safe_customer = str(client).replace(" ", "").replace("/", "_")
     
-    safe_customer = str(customer).replace(" ", "").replace("/", "_")
-    
-    if hasattr(date, "strftime"):
-        safe_date = date.strftime("%Y-%m-%d")
-    else:
-        safe_date = str(date)
+    safe_date = datetime.date.today().strftime("%Y-%m-%d")
     
     timestamp = int(time.time())
     

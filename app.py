@@ -972,33 +972,42 @@ def export_quote_png(
         qr_abs_path=qr_abs_path,
     )
 
-    import time
-    
-    safe_customer = str(client).replace(" ", "").replace("/", "_")
+    # ===== 文件命名（客户名 + 日期）=====
+    safe_customer = str(client).replace(" ", "").replace("/", "_").replace("\\", "_")
     safe_date = datetime.date.today().strftime("%Y-%m-%d")
     
-    timestamp = int(time.time())
+    base_name = f"{safe_date}_{safe_customer}"
+    file_name = f"{base_name}.png"
     
-    file_name = f"{safe_date}_{safe_customer}_{timestamp}.png"
+    # ===== 防重名（自动 +1）=====
+    customer_dir = os.path.join(EXPORT_DIR, safe_customer)
+    os.makedirs(customer_dir, exist_ok=True)
+    
+    counter = 1
+    while os.path.exists(os.path.join(customer_dir, file_name)):
+        file_name = f"{base_name}_{counter}.png"
+        counter += 1
+    
+    # ===== 浏览器检测 =====
     browser_executable = detect_browser_executable()
     
     if browser_executable:
         hti = Html2Image(
-            output_path=EXPORT_DIR,
+            output_path=customer_dir,
             browser_executable=browser_executable
         )
     else:
-        # 让 html2image 自己尝试；如果云端无浏览器，会在外层被捕获并提示
-        hti = Html2Image(output_path=EXPORT_DIR)
+        hti = Html2Image(output_path=customer_dir)
     
+    # ===== 生成图片 =====
     hti.screenshot(
         html_str=html_code,
         save_as=file_name,
         size=(1500, img_height)
     )
     
-    return os.path.join(EXPORT_DIR, file_name)
-
+    # ===== 返回路径 =====
+    return os.path.join(customer_dir, file_name)
 
 # --- 2. CSS ---
 st.markdown("""

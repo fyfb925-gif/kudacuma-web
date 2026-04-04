@@ -972,8 +972,18 @@ def export_quote_png(
         qr_abs_path=qr_abs_path,
     )
 
-    file_name = f"{quote_id}.png"
-    browser_executable = detect_browser_executable()
+    import time
+    
+    safe_customer = str(customer).replace(" ", "").replace("/", "_")
+    
+    if hasattr(date, "strftime"):
+        safe_date = date.strftime("%Y-%m-%d")
+    else:
+        safe_date = str(date)
+    
+    timestamp = int(time.time())
+    
+    file_name = f"{safe_date}_{safe_customer}_{timestamp}.png"
 
     if browser_executable:
         hti = Html2Image(

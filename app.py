@@ -400,6 +400,108 @@ def prepare_history_for_analysis(df):
     temp["年月"] = temp["日期"].dt.strftime("%Y-%m")
     temp["日期文本"] = temp["日期"].dt.strftime("%Y-%m-%d")
     return temp
+    
+    def build_customer_stats(all_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    客户维度统计：
+    - 报价单数
+    - 成交单数
+    - 成交转化率
+    - 总销售额（仅成交）
+    - 总利润（仅成交）
+    - 平均利润率（仅成交）
+    - 客单价（仅成交）
+    - 最近报价日期
+    - 最近成交日期
+    """
+    if all_df.empty:
+        return pd.DataFrame(columns=[
+            "客户", "报价单数", "成交单数", "成交转化率",
+            "总销售额", "总利润", "平均利润率", "客单价",
+            "最近报价日期", "最近成交日期"
+        ])
+
+    temp = all_df.copy()
+    temp["客户"] = temp["客户"].fillna("未知客户").astype(str).str.strip()
+    temp = temp[temp["客户"] != ""].copy()
+
+    if temp.empty:
+        return pd.DataFrame(columns=[
+            "客户", "报价单数", "成交单数", "成交转化率",
+            "总销售额", "总利润", "平均利润率", "客单价",
+            "最近报价日期", "最近成交日期"
+        ])
+
+    quote_df = temp[temp["状态"] == "报价"].copy()
+    deal_df = temp[temp["状态"] == "成交"].copy()
+
+    quote_stats = (
+        quote_df.groupby("客户")
+        .agg(
+            报价单数=("单号", "count"),
+            最近报价日期=("日期", "max"),
+        )
+        .reset_index()
+        if not quote_df.empty else
+        pd.DataFrame(columns=["客户", "报价单数", "最近报价日期"])
+    )
+
+    deal_stats = (
+        deal_df.groupby("客户")
+        .agg(
+            成交单数=("单号", "count"),
+            总销售额=("总收入", "sum"),
+            总利润=("总利润", "sum"),
+            平均利润率=("利润率", "mean"),
+            最近成交日期=("日期", "max"),
+        )
+        .reset_index()
+        if not deal_df.empty else
+        pd.DataFrame(columns=["客户", "成交单数", "总销售额", "总利润", "平均利润率", "最近成交日期"])
+    )
+
+    result = pd.merge(quote_stats, deal_stats, on="客户", how="outer")
+
+    for col in ["报价单数", "成交单数", "总销售额", "总利润", "平均利润率"]:
+        if col not in result.columns:
+            result[col] = 0
+
+    result["报价单数"] = result["报价单数"].fillna(0).astype(int)
+    result["成交单数"] = result["成交单数"].fillna(0).astype(int)
+    result["总销售额"] = result["总销售额"].fillna(0).astype(float)
+    result["总利润"] = result["总利润"].fillna(0).astype(float)
+    result["平均利润率"] = result["平均利润率"].fillna(0).astype(float)
+
+    result["客单价"] = result.apply(
+        lambda row: row["总销售额"] / row["成交单数"] if row["成交单数"] > 0 else 0,
+        axis=1
+    )
+
+    result["成交转化率"] = result.apply(
+        lambda row: (row["成交单数"] / row["报价单数"] * 100) if row["报价单数"] > 0 else 0,
+        axis=1
+    )
+
+    if "最近报价日期" in result.columns:
+        result["最近报价日期"] = pd.to_datetime(result["最近报价日期"], errors="coerce").dt.strftime("%Y-%m-%d")
+        result["最近报价日期"] = result["最近报价日期"].fillna("-")
+    else:
+        result["最近报价日期"] = "-"
+
+    if "最近成交日期" in result.columns:
+        result["最近成交日期"] = pd.to_datetime(result["最近成交日期"], errors="coerce").dt.strftime("%Y-%m-%d")
+        result["最近成交日期"] = result["最近成交日期"].fillna("-")
+    else:
+        result["最近成交日期"] = "-"
+
+    result = result[[
+        "客户", "报价单数", "成交单数", "成交转化率",
+        "总销售额", "总利润", "平均利润率", "客单价",
+        "最近报价日期", "最近成交日期"
+    ]].copy()
+
+    result = result.sort_values(by="总利润", ascending=False).reset_index(drop=True)
+    return result
 
 
 def _build_item_cards_html(valid_df: pd.DataFrame) -> str:
@@ -2100,24 +2202,33 @@ elif menu == "运营分析":
         left, right = st.columns(2)
 
         with left:
-            st.markdown("### 客户贡献排行")
-            customer_rank = (
-                df.groupby("客户")
-                .agg(
-                    成交单数=("单号", "count"),
-                    销售额=("总收入", "sum"),
-                    利润=("总利润", "sum"),
-                    平均利润率=("利润率", "mean"),
+            st.markdown("### 客户维度统计")
+        
+            history_all = load_history()
+            all_analysis_df = prepare_history_for_analysis(history_all)
+            customer_stats = build_customer_stats(all_analysis_df)
+        
+            if customer_stats.empty:
+                st.caption("暂无客户统计数据。")
+            else:
+                customer_stats_show = customer_stats.copy()
+                customer_stats_show["成交转化率"] = customer_stats_show["成交转化率"].map(lambda x: f"{x:.2f}%")
+                customer_stats_show["总销售额"] = customer_stats_show["总销售额"].map(format_jpy)
+                customer_stats_show["总利润"] = customer_stats_show["总利润"].map(format_jpy)
+                customer_stats_show["平均利润率"] = customer_stats_show["平均利润率"].map(lambda x: f"{x:.2f}%")
+                customer_stats_show["客单价"] = customer_stats_show["客单价"].map(format_jpy)
+        
+                st.dataframe(customer_stats_show, use_container_width=True, hide_index=True)
+        
+                top_profit_customer = customer_stats.iloc[0]["客户"] if len(customer_stats) > 0 else "-"
+                top_profit_value = customer_stats.iloc[0]["总利润"] if len(customer_stats) > 0 else 0
+                top_sales_customer = customer_stats.sort_values(by="总销售额", ascending=False).iloc[0]["客户"] if len(customer_stats) > 0 else "-"
+                top_sales_value = customer_stats.sort_values(by="总销售额", ascending=False).iloc[0]["总销售额"] if len(customer_stats) > 0 else 0
+        
+                st.caption(
+                    f"最赚钱客户：{top_profit_customer}（{format_jpy(top_profit_value)}） ｜ "
+                    f"销售额最高客户：{top_sales_customer}（{format_jpy(top_sales_value)}）"
                 )
-                .reset_index()
-                .sort_values(by="销售额", ascending=False)
-            )
-
-            customer_rank["销售额"] = customer_rank["销售额"].map(format_jpy)
-            customer_rank["利润"] = customer_rank["利润"].map(format_jpy)
-            customer_rank["平均利润率"] = customer_rank["平均利润率"].map(lambda x: f"{x:.2f}%")
-
-            st.dataframe(customer_rank, use_container_width=True, hide_index=True)
 
         with right:
             st.markdown("### 月度汇总")

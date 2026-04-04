@@ -402,18 +402,18 @@ def prepare_history_for_analysis(df):
     return temp
     
     def build_customer_stats(all_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    客户维度统计：
-    - 报价单数
-    - 成交单数
-    - 成交转化率
-    - 总销售额（仅成交）
-    - 总利润（仅成交）
-    - 平均利润率（仅成交）
-    - 客单价（仅成交）
-    - 最近报价日期
-    - 最近成交日期
-    """
+        """
+        客户维度统计：
+        - 报价单数
+        - 成交单数
+        - 成交转化率
+        - 总销售额（仅成交）
+        - 总利润（仅成交）
+        - 平均利润率（仅成交）
+        - 客单价（仅成交）
+        - 最近报价日期
+        - 最近成交日期
+        """
     if all_df.empty:
         return pd.DataFrame(columns=[
             "客户", "报价单数", "成交单数", "成交转化率",

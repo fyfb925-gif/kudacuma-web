@@ -400,65 +400,64 @@ def prepare_history_for_analysis(df):
     temp["年月"] = temp["日期"].dt.strftime("%Y-%m")
     temp["日期文本"] = temp["日期"].dt.strftime("%Y-%m-%d")
     return temp
-    
-    def build_customer_stats(all_df: pd.DataFrame) -> pd.DataFrame:
-        """
-        客户维度统计：
-        - 报价单数
-        - 成交单数
-        - 成交转化率
-        - 总销售额（仅成交）
-        - 总利润（仅成交）
-        - 平均利润率（仅成交）
-        - 客单价（仅成交）
-        - 最近报价日期
-        - 最近成交日期
-        """
-    if all_df.empty:
-        return pd.DataFrame(columns=[
-            "客户", "报价单数", "成交单数", "成交转化率",
-            "总销售额", "总利润", "平均利润率", "客单价",
-            "最近报价日期", "最近成交日期"
-        ])
+
+
+def build_customer_stats(all_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    客户维度统计：
+    - 报价单数
+    - 成交单数
+    - 成交转化率
+    - 总销售额（仅成交）
+    - 总利润（仅成交）
+    - 平均利润率（仅成交）
+    - 客单价（仅成交）
+    - 最近报价日期
+    - 最近成交日期
+    """
+    columns = [
+        "客户", "报价单数", "成交单数", "成交转化率",
+        "总销售额", "总利润", "平均利润率", "客单价",
+        "最近报价日期", "最近成交日期"
+    ]
+
+    if all_df is None or all_df.empty:
+        return pd.DataFrame(columns=columns)
 
     temp = all_df.copy()
     temp["客户"] = temp["客户"].fillna("未知客户").astype(str).str.strip()
     temp = temp[temp["客户"] != ""].copy()
 
     if temp.empty:
-        return pd.DataFrame(columns=[
-            "客户", "报价单数", "成交单数", "成交转化率",
-            "总销售额", "总利润", "平均利润率", "客单价",
-            "最近报价日期", "最近成交日期"
-        ])
+        return pd.DataFrame(columns=columns)
 
     quote_df = temp[temp["状态"] == "报价"].copy()
     deal_df = temp[temp["状态"] == "成交"].copy()
 
-    quote_stats = (
-        quote_df.groupby("客户")
-        .agg(
-            报价单数=("单号", "count"),
-            最近报价日期=("日期", "max"),
+    if not quote_df.empty:
+        quote_stats = (
+            quote_df.groupby("客户", as_index=False)
+            .agg(
+                报价单数=("单号", "count"),
+                最近报价日期=("日期", "max"),
+            )
         )
-        .reset_index()
-        if not quote_df.empty else
-        pd.DataFrame(columns=["客户", "报价单数", "最近报价日期"])
-    )
+    else:
+        quote_stats = pd.DataFrame(columns=["客户", "报价单数", "最近报价日期"])
 
-    deal_stats = (
-        deal_df.groupby("客户")
-        .agg(
-            成交单数=("单号", "count"),
-            总销售额=("总收入", "sum"),
-            总利润=("总利润", "sum"),
-            平均利润率=("利润率", "mean"),
-            最近成交日期=("日期", "max"),
+    if not deal_df.empty:
+        deal_stats = (
+            deal_df.groupby("客户", as_index=False)
+            .agg(
+                成交单数=("单号", "count"),
+                总销售额=("总收入", "sum"),
+                总利润=("总利润", "sum"),
+                平均利润率=("利润率", "mean"),
+                最近成交日期=("日期", "max"),
+            )
         )
-        .reset_index()
-        if not deal_df.empty else
-        pd.DataFrame(columns=["客户", "成交单数", "总销售额", "总利润", "平均利润率", "最近成交日期"])
-    )
+    else:
+        deal_stats = pd.DataFrame(columns=["客户", "成交单数", "总销售额", "总利润", "平均利润率", "最近成交日期"])
 
     result = pd.merge(quote_stats, deal_stats, on="客户", how="outer")
 
@@ -466,11 +465,11 @@ def prepare_history_for_analysis(df):
         if col not in result.columns:
             result[col] = 0
 
-    result["报价单数"] = result["报价单数"].fillna(0).astype(int)
-    result["成交单数"] = result["成交单数"].fillna(0).astype(int)
-    result["总销售额"] = result["总销售额"].fillna(0).astype(float)
-    result["总利润"] = result["总利润"].fillna(0).astype(float)
-    result["平均利润率"] = result["平均利润率"].fillna(0).astype(float)
+    result["报价单数"] = pd.to_numeric(result["报价单数"], errors="coerce").fillna(0).astype(int)
+    result["成交单数"] = pd.to_numeric(result["成交单数"], errors="coerce").fillna(0).astype(int)
+    result["总销售额"] = pd.to_numeric(result["总销售额"], errors="coerce").fillna(0.0)
+    result["总利润"] = pd.to_numeric(result["总利润"], errors="coerce").fillna(0.0)
+    result["平均利润率"] = pd.to_numeric(result["平均利润率"], errors="coerce").fillna(0.0)
 
     result["客单价"] = result.apply(
         lambda row: row["总销售额"] / row["成交单数"] if row["成交单数"] > 0 else 0,
@@ -478,7 +477,7 @@ def prepare_history_for_analysis(df):
     )
 
     result["成交转化率"] = result.apply(
-        lambda row: (row["成交单数"] / row["报价单数"] * 100) if row["报价单数"] > 0 else 0,
+        lambda row: row["成交单数"] / row["报价单数"] * 100 if row["报价单数"] > 0 else 0,
         axis=1
     )
 
@@ -494,12 +493,7 @@ def prepare_history_for_analysis(df):
     else:
         result["最近成交日期"] = "-"
 
-    result = result[[
-        "客户", "报价单数", "成交单数", "成交转化率",
-        "总销售额", "总利润", "平均利润率", "客单价",
-        "最近报价日期", "最近成交日期"
-    ]].copy()
-
+    result = result[columns].copy()
     result = result.sort_values(by="总利润", ascending=False).reset_index(drop=True)
     return result
 

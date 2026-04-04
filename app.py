@@ -973,9 +973,8 @@ def export_quote_png(
     )
 
     import time
-        
-    safe_customer = str(client).replace(" ", "").replace("/", "_")
     
+    safe_customer = str(client).replace(" ", "").replace("/", "_")
     safe_date = datetime.date.today().strftime("%Y-%m-%d")
     
     timestamp = int(time.time())

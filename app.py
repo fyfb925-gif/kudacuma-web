@@ -980,7 +980,8 @@ def export_quote_png(
     timestamp = int(time.time())
     
     file_name = f"{safe_date}_{safe_customer}_{timestamp}.png"
-
+    browser_executable = detect_browser_executable()
+    
     if browser_executable:
         hti = Html2Image(
             output_path=EXPORT_DIR,
@@ -989,13 +990,13 @@ def export_quote_png(
     else:
         # 让 html2image 自己尝试；如果云端无浏览器，会在外层被捕获并提示
         hti = Html2Image(output_path=EXPORT_DIR)
-
+    
     hti.screenshot(
         html_str=html_code,
         save_as=file_name,
         size=(1500, img_height)
     )
-
+    
     return os.path.join(EXPORT_DIR, file_name)
 
 

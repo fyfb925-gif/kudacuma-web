@@ -2214,7 +2214,7 @@ elif menu == "运营分析":
             help=f"完整金额：{format_jpy(avg_order_value)}"
         )
 
-        st.caption(f"本月真实利润率：{month_avg_margin:.2f}%")
+        st.caption(f"本月真实利润率：{month_real_margin:.2f}%")
         st.markdown("---")
 
         st.markdown("### 最近30天趋势")

@@ -466,9 +466,12 @@ def build_customer_stats(all_df: pd.DataFrame) -> pd.DataFrame:
                 成交单数=("单号", "count"),
                 总销售额=("总收入", "sum"),
                 总利润=("总利润", "sum"),
-                平均利润率=("利润率", "mean"),
                 最近成交日期=("日期", "max"),
             )
+        )
+        deal_stats["平均利润率"] = deal_stats.apply(
+            lambda row: (row["总利润"] / row["总销售额"] * 100) if row["总销售额"] > 0 else 0,
+            axis=1
         )
     else:
         deal_stats = pd.DataFrame(columns=["客户", "成交单数", "总销售额", "总利润", "平均利润率", "最近成交日期"])
@@ -2278,10 +2281,14 @@ elif menu == "运营分析":
                     成交单数=("单号", "count"),
                     销售额=("总收入", "sum"),
                     利润=("总利润", "sum"),
-                    平均利润率=("利润率", "mean"),
                 )
                 .reset_index()
                 .sort_values(by="年月", ascending=False)
+            )
+            
+            monthly_summary["平均利润率"] = monthly_summary.apply(
+                lambda row: (row["利润"] / row["销售额"] * 100) if row["销售额"] > 0 else 0,
+                axis=1
             )
 
             monthly_summary["销售额"] = monthly_summary["销售额"].map(format_jpy)

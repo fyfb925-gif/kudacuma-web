@@ -129,6 +129,20 @@ def format_jpy(v):
         return "¥ 0"
 
 
+def format_jpy_compact(v):
+    try:
+        v = float(v)
+    except Exception:
+        return "¥ 0"
+
+    if v >= 1_000_000:
+        return f"¥ {v / 1_000_000:.2f}M"
+    elif v >= 10_000:
+        return f"¥ {v / 10_000:.1f}万"
+    else:
+        return f"¥ {int(v):,}"
+
+
 def safe_format_jpy(v):
     try:
         return f"¥{int(float(v)):,}"
@@ -2157,16 +2171,48 @@ elif menu == "运营分析":
         month_avg_margin = df_month["利润率"].mean() if month_orders else 0
 
         a1, a2, a3, a4 = st.columns(4)
-        a1.metric("总成交单数", f"{total_orders}")
-        a2.metric("总销售额", format_jpy(total_revenue))
-        a3.metric("总利润", format_jpy(total_profit))
-        a4.metric("平均利润率", f"{avg_margin:.2f}%")
-
+        a1.metric(
+            "总成交单数",
+            f"{total_orders}",
+            help=f"完整数值：{total_orders} 单"
+        )
+        a2.metric(
+            "总销售额",
+            format_jpy_compact(total_revenue),
+            help=f"完整金额：{format_jpy(total_revenue)}"
+        )
+        a3.metric(
+            "总利润",
+            format_jpy_compact(total_profit),
+            help=f"完整金额：{format_jpy(total_profit)}"
+        )
+        a4.metric(
+            "平均利润率",
+            f"{avg_margin:.2f}%",
+            help=f"完整数值：{avg_margin:.2f}%"
+        )
+        
         b1, b2, b3, b4 = st.columns(4)
-        b1.metric("本月成交单数", f"{month_orders}")
-        b2.metric("本月销售额", format_jpy(month_revenue))
-        b3.metric("本月利润", format_jpy(month_profit))
-        b4.metric("客单价", format_jpy(avg_order_value))
+        b1.metric(
+            "本月成交单数",
+            f"{month_orders}",
+            help=f"完整数值：{month_orders} 单"
+        )
+        b2.metric(
+            "本月销售额",
+            format_jpy_compact(month_revenue),
+            help=f"完整金额：{format_jpy(month_revenue)}"
+        )
+        b3.metric(
+            "本月利润",
+            format_jpy_compact(month_profit),
+            help=f"完整金额：{format_jpy(month_profit)}"
+        )
+        b4.metric(
+            "客单价",
+            format_jpy_compact(avg_order_value),
+            help=f"完整金额：{format_jpy(avg_order_value)}"
+        )
 
         st.caption(f"本月平均利润率：{month_avg_margin:.2f}%")
         st.markdown("---")

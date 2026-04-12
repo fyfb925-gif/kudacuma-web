@@ -2177,6 +2177,9 @@ elif menu == "历史订单":
     st.subheader("📚 历史订单")
     history = load_history()
 
+    if not is_admin():
+        history = history[history["创建者"].astype(str) == get_current_user()].copy()
+    
     if history.empty:
         st.info("暂无历史订单。")
     else:

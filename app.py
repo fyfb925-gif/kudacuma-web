@@ -47,7 +47,18 @@ def is_staff():
 def is_logged_in():
     return st.session_state.get("logged_in", False)
 
-def can_view_order(row):
+def assert_order_permission(row):
+    if is_admin():
+        return True
+
+    owner = str(row.get("创建者", "")).strip()
+    if owner != get_current_user():
+        st.error("❌ 无权限操作该订单")
+        st.stop()
+    return True
+
+
+def is_order_owner(row):
     if is_admin():
         return True
     return str(row.get("创建者", "")).strip() == get_current_user()
@@ -2184,11 +2195,15 @@ elif menu == "历史订单":
         st.info("暂无历史订单。")
     else:
         show_df = history.copy()
-        show_df["总收入"] = clean_number_series(show_df["总收入"]).fillna(0).map(safe_format_jpy)
-        show_df["总利润"] = clean_number_series(show_df["总利润"]).fillna(0).map(safe_format_jpy)
-        show_df["利润率"] = clean_number_series(show_df["利润率"]).fillna(0).map(lambda x: f"{float(x):.2f}%")
 
-        st.dataframe(show_df, use_container_width=True, hide_index=True)
+        if is_admin():
+            show_df["总收入"] = clean_number_series(show_df["总收入"]).fillna(0).map(safe_format_jpy)
+            show_df["总利润"] = clean_number_series(show_df["总利润"]).fillna(0).map(safe_format_jpy)
+            show_df["利润率"] = clean_number_series(show_df["利润率"]).fillna(0).map(lambda x: f"{float(x):.2f}%")
+            st.dataframe(show_df, use_container_width=True, hide_index=True)
+        else:
+            staff_show_df = show_df[["日期", "客户", "单号", "状态", "运费状态", "创建者"]].copy()
+            st.dataframe(staff_show_df, use_container_width=True, hide_index=True)
 
         st.markdown("### 载入为新草稿")
         draft_df = history.copy()
@@ -2203,12 +2218,19 @@ elif menu == "历史订单":
 
         if st.button("📥 载入为新草稿"):
             row = draft_df[draft_df["展示"] == selected_draft].iloc[0]
+            assert_order_permission(row)
+
             order_id = str(row["单号"])
             detail = load_order_detail(order_id)
 
             if detail is None:
                 st.error("这条订单没有可载入的商品明细。只有使用当前版本新保存的订单，才支持载入为新草稿。")
             else:
+                detail_owner = str(detail.get("created_by", "")).strip()
+                if not is_admin() and detail_owner and detail_owner != get_current_user():
+                    st.error("❌ 无权限载入这条订单明细")
+                    st.stop()
+
                 load_detail_as_new_draft(detail)
                 st.session_state["menu_main"] = "新建报价"
                 st.success("已载入为新草稿，正在跳转到新建报价。")
@@ -2230,38 +2252,42 @@ elif menu == "历史订单":
             selected_quote = st.selectbox("选择一条报价记录改为成交", quote_df["展示"].tolist())
 
             if st.button("🔄 改为成交"):
+                row = quote_df[quote_df["展示"] == selected_quote].iloc[0]
+                assert_order_permission(row)
+
                 idx = quote_df[quote_df["展示"] == selected_quote].index[0]
                 history.loc[idx, "状态"] = "成交"
                 save_history(history)
                 st.success("该记录已改为成交，请刷新或切换页面查看最新结果。")
 
-        st.markdown("### 删除订单记录")
-        delete_df = history.copy()
+        if is_admin():
+            st.markdown("### 删除订单记录")
+            delete_df = history.copy()
 
-        delete_df["总收入_清洗"] = clean_number_series(delete_df["总收入"]).fillna(0)
+            delete_df["总收入_清洗"] = clean_number_series(delete_df["总收入"]).fillna(0)
 
-        delete_df["展示"] = (
-            delete_df["日期"].astype(str)
-            + " | "
-            + delete_df["客户"].astype(str)
-            + " | "
-            + delete_df["单号"].astype(str)
-            + " | "
-            + delete_df["状态"].astype(str)
-            + " | "
-            + delete_df["总收入_清洗"].map(safe_format_jpy)
-        )
+            delete_df["展示"] = (
+                delete_df["日期"].astype(str)
+                + " | "
+                + delete_df["客户"].astype(str)
+                + " | "
+                + delete_df["单号"].astype(str)
+                + " | "
+                + delete_df["状态"].astype(str)
+                + " | "
+                + delete_df["总收入_清洗"].map(safe_format_jpy)
+            )
 
-        selected_labels = st.multiselect("选择要删除的报价/订单记录", delete_df["展示"].tolist())
+            selected_labels = st.multiselect("选择要删除的报价/订单记录", delete_df["展示"].tolist())
 
-        if st.button("🗑️ 删除选中记录", type="primary"):
-            if not selected_labels:
-                st.warning("请先选择要删除的记录。")
-            else:
-                remaining = delete_df[~delete_df["展示"].isin(selected_labels)].copy()
-                remaining = remaining[BASE_COLUMNS]
-                save_history(remaining)
-                st.success(f"已删除 {len(selected_labels)} 条记录，请刷新或切换页面查看最新结果。")
+            if st.button("🗑️ 删除选中记录", type="primary"):
+                if not selected_labels:
+                    st.warning("请先选择要删除的记录。")
+                else:
+                    remaining = delete_df[~delete_df["展示"].isin(selected_labels)].copy()
+                    remaining = remaining[BASE_COLUMNS]
+                    save_history(remaining)
+                    st.success(f"已删除 {len(selected_labels)} 条记录，请刷新或切换页面查看最新结果。")
 
 
 # --- 6. 运营分析 ---

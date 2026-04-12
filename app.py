@@ -24,7 +24,16 @@ SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"
 HISTORY_WORKSHEET = "history"
 
 BASE_COLUMNS = [
-    "日期", "客户", "单号", "状态", "运费状态", "总收入", "总利润", "利润率"
+    "日期",
+    "客户",
+    "单号",
+    "状态",
+    "运费状态",
+    "创建者",
+    "角色",
+    "总收入",
+    "总利润",
+    "利润率"
 ]
 
 if not os.path.exists(QR_DIR):

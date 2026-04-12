@@ -81,6 +81,7 @@ def login_block():
             st.session_state["auth_user"] = username
             st.session_state["auth_role"] = user["role"]
             st.session_state["auth_display_name"] = user.get("display_name", username)
+            st.session_state["login_version"] = LOGIN_VERSION
             st.success("登录成功")
             st.rerun()
         else:

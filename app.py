@@ -1465,9 +1465,25 @@ div[data-testid="stDataEditor"] textarea {
 # --- 3. 菜单 ---
 with st.sidebar:
     st.title("🐻 KDKM V2")
+
+    st.caption(f"当前用户：{st.session_state.get('auth_display_name', '')}")
+    st.caption(f"权限角色：{get_current_role()}")
+
+    if is_admin():
+        menu_options = ["新建报价", "历史订单", "运营分析", "系统设置"]
+    else:
+        menu_options = ["新建报价", "历史订单"]
+
     if "menu_main" not in st.session_state:
-        st.session_state["menu_main"] = "新建报价"
-    menu = st.radio("导航", ["新建报价", "历史订单", "运营分析", "系统设置"], key="menu_main")
+        st.session_state["menu_main"] = menu_options[0]
+
+    if st.session_state["menu_main"] not in menu_options:
+        st.session_state["menu_main"] = menu_options[0]
+
+    menu = st.radio("导航", menu_options, key="menu_main")
+
+    st.markdown("---")
+    logout_button()
 
 
 # --- 4. 新建报价 ---

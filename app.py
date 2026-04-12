@@ -98,13 +98,21 @@ def logout_button():
 st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V2", layout="wide")
 
 LOGIN_VERSION = "v2"
+ENABLE_LOGIN = False
 
-if not is_logged_in():
+if ENABLE_LOGIN and not is_logged_in():
     login_block()
     st.stop()
 
+if not ENABLE_LOGIN:
+    st.session_state["logged_in"] = True
+    st.session_state["auth_user"] = "admin"
+    st.session_state["auth_role"] = "admin"
+    st.session_state["auth_display_name"] = USERS["admin"].get("display_name", "admin")
+    st.session_state["login_version"] = LOGIN_VERSION
+
 # 登录版本校验（强制全员下线机制）
-if st.session_state.get("login_version") != LOGIN_VERSION:
+if ENABLE_LOGIN and st.session_state.get("login_version") != LOGIN_VERSION:
     st.session_state.clear()
     st.warning("⚠️ 登录状态已失效，请重新登录")
     st.stop()

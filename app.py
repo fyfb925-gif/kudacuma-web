@@ -356,6 +356,8 @@ def build_order_detail_payload(
         "grand_total_jpy": int(grand_total_jpy),
         "net_profit_jpy": int(net_profit_jpy),
         "margin": float(round(margin, 2)),
+        "created_by": get_current_user(),
+        "created_role": get_current_role(),
         "items": items,
     }
 
@@ -2059,6 +2061,8 @@ if menu == "新建报价":
                     quote_id,
                     "报价",
                     freight_status,
+                    get_current_user(),
+                    get_current_role(),
                     grand_total_jpy,
                     net_profit_jpy,
                     round(margin, 2)
@@ -2109,6 +2113,8 @@ if menu == "新建报价":
                     quote_id,
                     "成交",
                     freight_status,
+                    get_current_user(),
+                    get_current_role(),
                     grand_total_jpy,
                     net_profit_jpy,
                     round(margin, 2)

@@ -516,6 +516,26 @@ def save_history_to_csv(df: pd.DataFrame):
     safe_df = normalize_history_df(df)
     safe_df.to_csv(DB_FILE, index=False, encoding="utf-8-sig")
 
+def write_operation_log(action_type, order_id="", client="", note=""):
+    try:
+        log_df = pd.read_csv(LOG_FILE, encoding="utf-8-sig")
+    except Exception:
+        log_df = pd.DataFrame(columns=LOG_COLUMNS)
+
+    new_row = pd.DataFrame([[
+        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        get_current_display_name(),
+        get_current_user(),
+        get_current_role(),
+        action_type,
+        str(order_id),
+        str(client),
+        str(note),
+    ]], columns=LOG_COLUMNS)
+
+    log_df = pd.concat([log_df, new_row], ignore_index=True)
+    log_df.to_csv(LOG_FILE, index=False, encoding="utf-8-sig")
+
 
 def prepare_history_for_analysis(df):
     if df.empty:
@@ -2115,6 +2135,7 @@ if menu == "新建报价":
                 history = load_history()
                 history = pd.concat([history, new_row], ignore_index=True)
                 save_history(history)
+                write_operation_log("保存为报价", quote_id, client, "新建报价记录")
                 st.success("已保存为报价")
 
     with s2:

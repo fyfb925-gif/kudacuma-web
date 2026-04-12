@@ -1600,7 +1600,24 @@ if menu == "新建报价":
             if rate > 0 else
             f"当前人民币运费：{format_rmb_text(rmb_shipping_fee)} RMB"
         )
-
+        
+    if is_admin():
+        editor_columns = {
+            "商品": st.column_config.TextColumn("商品", width="large", required=True),
+            "数量": st.column_config.NumberColumn("数量", min_value=0, step=1, width="small"),
+            "售价": st.column_config.NumberColumn("售价", min_value=0, step=100, width="small"),
+            "折扣": st.column_config.NumberColumn("折扣", min_value=0.0, max_value=100.0, step=1.0, width="small"),
+            "成本": st.column_config.NumberColumn("成本", min_value=0, step=100, width="small"),
+        }
+    else:
+        editor_columns = {
+            "商品": st.column_config.TextColumn("商品", width="large", required=True),
+            "数量": st.column_config.NumberColumn("数量", min_value=0, step=1, width="small"),
+            "售价": st.column_config.NumberColumn("售价", min_value=0, step=100, width="small"),
+            "折扣": st.column_config.NumberColumn("折扣", min_value=0.0, max_value=100.0, step=1.0, width="small"),
+            "成本": st.column_config.NumberColumn("成本", min_value=0, step=100, width="small", disabled=True),
+        }
+        
     df_input = st.data_editor(
         pd.DataFrame(st.session_state["items_editor_seed"]),
         num_rows="dynamic",

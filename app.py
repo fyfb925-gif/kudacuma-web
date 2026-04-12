@@ -1665,24 +1665,25 @@ if menu == "新建报价":
             )
             net_profit_rmb = round(net_profit_jpy * rate, 2)
 
-            st.markdown(f"""
-                <div class="profit-panel">
-                    <div style="font-weight:600; margin-bottom:12px; border-bottom:1px solid #3d4256; padding-bottom:5px;">📊 收益透视图</div>
-                    <div class="profit-row"><span>商品利</span><span>+¥{p_rev - p_cost:,}</span></div>
-                    <div class="profit-row"><span>包税运费差</span><span>+¥{freight_profit_jpy:,}</span></div>
-                    <div class="profit-row" style="color:#f39c12;"><span>金额调整</span><span>-¥{manual_discount:,}</span></div>
-                    <div class="profit-row" style="color:#e74c3c;"><span>结算损耗(2%)</span><span>-¥{loss_gap:,}</span></div>
-                    <div class="profit-row" style="color:#f39c12;"><span>额外杂费</span><span>-¥{other_c:,}</span></div>
-                    <hr style="margin:10px 0; border-top:1px solid #3d4256;">
-                    <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-                        <span style="font-weight:600; padding-bottom: 5px;">预估净利</span>
-                        <div style="text-align:right;">
-                            <div style="font-size:1.28rem; font-weight:700; color:#27ae60;">¥{net_profit_jpy:,}</div>
-                            <div style="font-size:0.86rem; color:#f39c12; font-weight:600; margin-top:2px;">≈ RMB {net_profit_rmb:,}</div>
+            if is_admin():
+                st.markdown(f"""
+                    <div class="profit-panel">
+                        <div style="font-weight:600; margin-bottom:12px; border-bottom:1px solid #3d4256; padding-bottom:5px;">📊 收益透视图</div>
+                        <div class="profit-row"><span>商品利</span><span>+¥{p_rev - p_cost:,}</span></div>
+                        <div class="profit-row"><span>包税运费差</span><span>+¥{freight_profit_jpy:,}</span></div>
+                        <div class="profit-row" style="color:#f39c12;"><span>金额调整</span><span>-¥{manual_discount:,}</span></div>
+                        <div class="profit-row" style="color:#e74c3c;"><span>结算损耗(2%)</span><span>-¥{loss_gap:,}</span></div>
+                        <div class="profit-row" style="color:#f39c12;"><span>额外杂费</span><span>-¥{other_c:,}</span></div>
+                        <hr style="margin:10px 0; border-top:1px solid #3d4256;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                            <span style="font-weight:600; padding-bottom: 5px;">预估净利</span>
+                            <div style="text-align:right;">
+                                <div style="font-size:1.28rem; font-weight:700; color:#27ae60;">¥{net_profit_jpy:,}</div>
+                                <div style="font-size:0.86rem; color:#f39c12; font-weight:600; margin-top:2px;">≈ RMB {net_profit_rmb:,}</div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
         else:
             net_profit_jpy = (
                 (p_rev - p_cost)
@@ -1695,26 +1696,27 @@ if menu == "新建报价":
             )
             net_profit_rmb = round(net_profit_jpy * rate, 2)
 
-            st.markdown(f"""
-                <div class="profit-panel">
-                    <div style="font-weight:600; margin-bottom:12px; border-bottom:1px solid #3d4256; padding-bottom:5px;">📊 收益透视图</div>
-                    <div class="profit-row"><span>商品利</span><span>+¥{p_rev - p_cost:,}</span></div>
-                    <div class="profit-row"><span>代购费</span><span>+¥{disp_service_fee:,}</span></div>
-                    <div class="profit-row"><span>运费差</span><span>+¥{ship_total_quote - ship_total_cost:,}</span></div>
-                    <div class="profit-row"><span>通道差</span><span>+¥{disp_pay_fee:,}</span></div>
-                    <div class="profit-row" style="color:#f39c12;"><span>金额调整</span><span>-¥{manual_discount:,}</span></div>
-                    <div class="profit-row" style="color:#e74c3c;"><span>结算损耗(2%)</span><span>-¥{loss_gap:,}</span></div>
-                    <div class="profit-row" style="color:#f39c12;"><span>额外杂费</span><span>-¥{other_c:,}</span></div>
-                    <hr style="margin:10px 0; border-top:1px solid #3d4256;">
-                    <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-                        <span style="font-weight:600; padding-bottom: 5px;">预估净利</span>
-                        <div style="text-align:right;">
-                            <div style="font-size:1.28rem; font-weight:700; color:#27ae60;">¥{net_profit_jpy:,}</div>
-                            <div style="font-size:0.86rem; color:#f39c12; font-weight:600; margin-top:2px;">≈ RMB {net_profit_rmb:,}</div>
+            if is_admin():
+                st.markdown(f"""
+                    <div class="profit-panel">
+                        <div style="font-weight:600; margin-bottom:12px; border-bottom:1px solid #3d4256; padding-bottom:5px;">📊 收益透视图</div>
+                        <div class="profit-row"><span>商品利</span><span>+¥{p_rev - p_cost:,}</span></div>
+                        <div class="profit-row"><span>代购费</span><span>+¥{disp_service_fee:,}</span></div>
+                        <div class="profit-row"><span>运费差</span><span>+¥{ship_total_quote - ship_total_cost:,}</span></div>
+                        <div class="profit-row"><span>通道差</span><span>+¥{disp_pay_fee:,}</span></div>
+                        <div class="profit-row" style="color:#f39c12;"><span>金额调整</span><span>-¥{manual_discount:,}</span></div>
+                        <div class="profit-row" style="color:#e74c3c;"><span>结算损耗(2%)</span><span>-¥{loss_gap:,}</span></div>
+                        <div class="profit-row" style="color:#f39c12;"><span>额外杂费</span><span>-¥{other_c:,}</span></div>
+                        <hr style="margin:10px 0; border-top:1px solid #3d4256;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                            <span style="font-weight:600; padding-bottom: 5px;">预估净利</span>
+                            <div style="text-align:right;">
+                                <div style="font-size:1.28rem; font-weight:700; color:#27ae60;">¥{net_profit_jpy:,}</div>
+                                <div style="font-size:0.86rem; color:#f39c12; font-weight:600; margin-top:2px;">≈ RMB {net_profit_rmb:,}</div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
 
     st.markdown(f"""
     <div class="quote-container">
@@ -1730,7 +1732,7 @@ if menu == "新建报价":
         </div>
         <hr style="margin: 20px 0; border:0; border-top:1px solid #eee;">
     """, unsafe_allow_html=True)
-
+    
     ql, qr = st.columns([1.1, 0.9])
 
     with ql:

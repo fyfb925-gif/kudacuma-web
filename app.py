@@ -1564,7 +1564,11 @@ if menu == "新建报价":
 
     w = f1.number_input("重量 (KG)", min_value=0.0, step=0.1, key="quote_weight_input")
     u_q = f2.number_input("报价运费 (JPY)", min_value=0, step=1, key="quote_uq_input")
-    u_c = f3.number_input("成本运费 (JPY)", min_value=0, step=1, key="quote_uc_input")
+
+    if is_admin():
+        u_c = f3.number_input("成本运费 (JPY)", min_value=0, step=1, key="quote_uc_input")
+    else:
+        u_c = int(st.session_state.get("quote_uc_input", 1400))
 
     if freight_currency_mode == "人民币结算":
         rmb_shipping_fee = f4.number_input("包税运费 (RMB)", min_value=0.0, step=10.0, format="%.2f", key="quote_rmb_shipping_input")

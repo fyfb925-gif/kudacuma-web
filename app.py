@@ -103,6 +103,12 @@ if not is_logged_in():
     login_block()
     st.stop()
 
+# 登录版本校验（强制全员下线机制）
+if st.session_state.get("login_version") != LOGIN_VERSION:
+    st.session_state.clear()
+    st.warning("⚠️ 登录状态已失效，请重新登录")
+    st.stop()
+
 DB_FILE = "kudacuma_history.csv"
 QR_DIR = "qr_codes"
 EXPORT_DIR = "exports"

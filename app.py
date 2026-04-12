@@ -1556,8 +1556,9 @@ with st.sidebar:
 
     menu = st.radio("导航", menu_options, key="menu_main")
 
-    st.markdown("---")
-    logout_button()
+    if ENABLE_LOGIN:
+        st.markdown("---")
+        logout_button()
 
 
 # --- 4. 新建报价 ---

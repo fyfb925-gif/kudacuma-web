@@ -2188,6 +2188,7 @@ if menu == "新建报价":
                 history = load_history()
                 history = pd.concat([history, new_row], ignore_index=True)
                 save_history(history)
+                write_operation_log("保存为成交", quote_id, client, "新建成交记录")
                 st.success("已保存为成交")
 
     with s3:

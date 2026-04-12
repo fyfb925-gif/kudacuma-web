@@ -47,6 +47,9 @@ def is_staff():
 def is_logged_in():
     return st.session_state.get("logged_in", False)
 
+def get_current_display_name():
+    return st.session_state.get("auth_display_name", get_current_user())
+
 def assert_order_permission(row):
     if is_admin():
         return True
@@ -367,7 +370,7 @@ def build_order_detail_payload(
         "grand_total_jpy": int(grand_total_jpy),
         "net_profit_jpy": int(net_profit_jpy),
         "margin": float(round(margin, 2)),
-        "created_by": get_current_user(),
+        "created_by": get_current_display_name(),
         "created_role": get_current_role(),
         "items": items,
     }
@@ -2072,7 +2075,7 @@ if menu == "新建报价":
                     quote_id,
                     "报价",
                     freight_status,
-                    get_current_user(),
+                    get_current_display_name(),
                     get_current_role(),
                     grand_total_jpy,
                     net_profit_jpy,
@@ -2124,7 +2127,7 @@ if menu == "新建报价":
                     quote_id,
                     "成交",
                     freight_status,
-                    get_current_user(),
+                    get_current_display_name(),
                     get_current_role(),
                     grand_total_jpy,
                     net_profit_jpy,
@@ -2189,7 +2192,12 @@ elif menu == "历史订单":
     history = load_history()
 
     if not is_admin():
-        history = history[history["创建者"].astype(str) == get_current_user()].copy()
+        current_user = get_current_user()
+        current_display_name = get_current_display_name()
+    
+        history = history[
+            history["创建者"].astype(str).isin([current_user, current_display_name])
+        ].copy()
     
     if history.empty:
         st.info("暂无历史订单。")

@@ -82,6 +82,10 @@ def logout_button():
 # --- 1. 基础配置 ---
 st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V2", layout="wide")
 
+if not is_logged_in():
+    login_block()
+    st.stop()
+
 DB_FILE = "kudacuma_history.csv"
 QR_DIR = "qr_codes"
 EXPORT_DIR = "exports"

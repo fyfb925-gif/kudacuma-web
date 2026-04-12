@@ -1536,7 +1536,7 @@ with st.sidebar:
     st.markdown(f"权限角色：{role_map.get(get_current_role(), get_current_role())}")
 
     if is_admin():
-        menu_options = ["新建报价", "历史订单", "运营分析", "系统设置"]
+        menu_options = ["新建报价", "历史订单", "运营分析", "系统设置", "操作日志"]
     else:
         menu_options = ["新建报价", "历史订单"]
 
@@ -2531,3 +2531,24 @@ elif menu == "系统设置":
         with open(os.path.join(QR_DIR, "微信支付.png"), "wb") as f:
             f.write(up_qr.getbuffer())
         st.success("二维码保存成功")
+
+# --- 8. 操作日志 ---
+elif menu == "操作日志":
+    st.subheader("📋 操作日志")
+
+    if not is_admin():
+        st.warning("仅管理员可查看操作日志")
+        st.stop()
+
+    LOG_FILE = "kudacuma_operation_log.csv"
+
+    try:
+        log_df = pd.read_csv(LOG_FILE, encoding="utf-8-sig")
+    except:
+        st.info("暂无日志记录")
+        st.stop()
+
+    if log_df.empty:
+        st.info("暂无日志记录")
+    else:
+        st.dataframe(log_df, use_container_width=True)

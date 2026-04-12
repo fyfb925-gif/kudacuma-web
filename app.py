@@ -1573,9 +1573,17 @@ if menu == "新建报价":
     if freight_currency_mode == "人民币结算":
         rmb_shipping_fee = f4.number_input("包税运费 (RMB)", min_value=0.0, step=10.0, format="%.2f", key="quote_rmb_shipping_input")
         manual_discount = f5.number_input("金额调整", min_value=0, step=100, key="quote_manual_discount_input")
-        other_c = st.number_input("额外杂费", min_value=0, step=100, key="quote_other_c_input")
+
+        if is_admin():
+            other_c = st.number_input("额外杂费", min_value=0, step=100, key="quote_other_c_input")
+        else:
+            other_c = int(st.session_state.get("quote_other_c_input", 0))
     else:
-        other_c = f4.number_input("额外杂费", min_value=0, step=100, key="quote_other_c_input")
+        if is_admin():
+            other_c = f4.number_input("额外杂费", min_value=0, step=100, key="quote_other_c_input")
+        else:
+            other_c = int(st.session_state.get("quote_other_c_input", 0))
+
         manual_discount = f5.number_input("金额调整", min_value=0, step=100, key="quote_manual_discount_input")
         rmb_shipping_fee = float(st.session_state.get("quote_rmb_shipping_input", 0.0))
 

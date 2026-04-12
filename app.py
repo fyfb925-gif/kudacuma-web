@@ -1483,7 +1483,12 @@ with st.sidebar:
     st.title("🐻 KDKM V2")
 
     st.caption(f"当前用户：{st.session_state.get('auth_display_name', '')}")
-    st.caption(f"权限角色：{get_current_role()}")
+    role_map = {
+        "admin": "老板",
+        "staff": "员工"
+    }
+    
+    st.markdown(f"权限角色：{role_map.get(get_current_role(), get_current_role())}")
 
     if is_admin():
         menu_options = ["新建报价", "历史订单", "运营分析", "系统设置"]

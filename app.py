@@ -113,7 +113,6 @@ DB_FILE = "kudacuma_history.csv"
 QR_DIR = "qr_codes"
 EXPORT_DIR = "exports"
 ORDER_DETAIL_DIR = "order_details"
-LOG_FILE = "kudacuma_operation_log.csv"
 
 # Google Sheets 配置
 SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"
@@ -2540,15 +2539,34 @@ elif menu == "操作日志":
         st.warning("仅管理员可查看操作日志")
         st.stop()
 
-    LOG_FILE = "kudacuma_operation_log.csv"
-
     try:
         log_df = pd.read_csv(LOG_FILE, encoding="utf-8-sig")
-    except:
+    except Exception:
         st.info("暂无日志记录")
         st.stop()
 
     if log_df.empty:
         st.info("暂无日志记录")
     else:
-        st.dataframe(log_df, use_container_width=True)
+        # ===== 筛选 =====
+        col1, col2 = st.columns(2)
+
+        with col1:
+            users = ["全部"] + sorted(log_df["操作人"].dropna().unique().tolist())
+            selected_user = st.selectbox("筛选用户", users)
+
+        with col2:
+            actions = ["全部"] + sorted(log_df["操作类型"].dropna().unique().tolist())
+            selected_action = st.selectbox("筛选操作类型", actions)
+
+        # ===== 应用筛选 =====
+        filtered_df = log_df.copy()
+
+        if selected_user != "全部":
+            filtered_df = filtered_df[filtered_df["操作人"] == selected_user]
+
+        if selected_action != "全部":
+            filtered_df = filtered_df[filtered_df["操作类型"] == selected_action]
+
+        # ===== 展示 =====
+        st.dataframe(filtered_df, use_container_width=True, hide_index=True)

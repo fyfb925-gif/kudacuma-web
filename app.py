@@ -96,6 +96,8 @@ def logout_button():
 # --- 1. 基础配置 ---
 st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V2", layout="wide")
 
+LOGIN_VERSION = "v1"
+
 if not is_logged_in():
     login_block()
     st.stop()

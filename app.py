@@ -113,6 +113,7 @@ DB_FILE = "kudacuma_history.csv"
 QR_DIR = "qr_codes"
 EXPORT_DIR = "exports"
 ORDER_DETAIL_DIR = "order_details"
+LOG_FILE = "kudacuma_operation_log.csv"
 
 # Google Sheets 配置
 SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"
@@ -131,6 +132,17 @@ BASE_COLUMNS = [
     "利润率"
 ]
 
+LOG_COLUMNS = [
+    "时间",
+    "操作人",
+    "账号",
+    "角色",
+    "操作类型",
+    "单号",
+    "客户",
+    "备注"
+]
+
 if not os.path.exists(QR_DIR):
     os.makedirs(QR_DIR)
 
@@ -145,6 +157,10 @@ if not os.path.exists(DB_FILE):
         DB_FILE, index=False, encoding="utf-8-sig"
     )
 
+if not os.path.exists(LOG_FILE):
+    pd.DataFrame(columns=LOG_COLUMNS).to_csv(
+        LOG_FILE, index=False, encoding="utf-8-sig"
+    )
 
 # =========================
 # 数据清洗 / 格式化工具函数

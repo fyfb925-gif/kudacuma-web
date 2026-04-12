@@ -2302,6 +2302,7 @@ elif menu == "历史订单":
 
                 load_detail_as_new_draft(detail)
                 st.session_state["menu_main"] = "新建报价"
+                write_operation_log("载入新草稿", order_id, row["客户"], "从历史订单载入")
                 st.success("已载入为新草稿，正在跳转到新建报价。")
                 st.rerun()
 
@@ -2327,6 +2328,7 @@ elif menu == "历史订单":
                 idx = quote_df[quote_df["展示"] == selected_quote].index[0]
                 history.loc[idx, "状态"] = "成交"
                 save_history(history)
+                write_operation_log("报价改为成交", row["单号"], row["客户"], "历史订单状态修改")
                 st.success("该记录已改为成交，请刷新或切换页面查看最新结果。")
 
         if is_admin():
@@ -2356,6 +2358,7 @@ elif menu == "历史订单":
                     remaining = delete_df[~delete_df["展示"].isin(selected_labels)].copy()
                     remaining = remaining[BASE_COLUMNS]
                     save_history(remaining)
+                    write_operation_log("删除订单", "", "", f"删除 {len(selected_labels)} 条记录")
                     st.success(f"已删除 {len(selected_labels)} 条记录，请刷新或切换页面查看最新结果。")
 
 

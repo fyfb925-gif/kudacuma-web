@@ -113,6 +113,7 @@ DB_FILE = "kudacuma_history.csv"
 QR_DIR = "qr_codes"
 EXPORT_DIR = "exports"
 ORDER_DETAIL_DIR = "order_details"
+LOG_FILE = "kudacuma_operation_log.csv"
 
 # Google Sheets 配置
 SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"

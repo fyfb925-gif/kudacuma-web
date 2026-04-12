@@ -16,9 +16,9 @@ from html2image import Html2Image
 # =========================
 USERS = {
     "admin": {
-        "password": "admin123456",
+        "password": "KUDAKUMA1209",
         "role": "admin",
-        "display_name": "老板账号"
+        "display_name": "🐻姐"
     },
     "staff1": {
         "password": "staff123",

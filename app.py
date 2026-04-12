@@ -11,6 +11,74 @@ import gspread
 from google.oauth2.service_account import Credentials
 from html2image import Html2Image
 
+# =========================
+# 轻量权限系统
+# =========================
+USERS = {
+    "admin": {
+        "password": "admin123456",
+        "role": "admin",
+        "display_name": "老板账号"
+    },
+    "staff1": {
+        "password": "staff123",
+        "role": "staff",
+        "display_name": "员工1"
+    },
+    "staff2": {
+        "password": "staff123",
+        "role": "staff",
+        "display_name": "员工2"
+    },
+}
+
+def get_current_user():
+    return st.session_state.get("auth_user", "")
+
+def get_current_role():
+    return st.session_state.get("auth_role", "")
+
+def is_admin():
+    return get_current_role() == "admin"
+
+def is_staff():
+    return get_current_role() == "staff"
+
+def is_logged_in():
+    return st.session_state.get("logged_in", False)
+
+def can_view_order(row):
+    if is_admin():
+        return True
+    return str(row.get("创建者", "")).strip() == get_current_user()
+
+def login_block():
+    st.title("🔐 果熊俱乐部系统登录")
+
+    with st.form("login_form", clear_on_submit=False):
+        username = st.text_input("账号")
+        password = st.text_input("密码", type="password")
+        submitted = st.form_submit_button("登录", use_container_width=True)
+
+    if submitted:
+        user = USERS.get(username)
+        if user and user["password"] == password:
+            st.session_state["logged_in"] = True
+            st.session_state["auth_user"] = username
+            st.session_state["auth_role"] = user["role"]
+            st.session_state["auth_display_name"] = user.get("display_name", username)
+            st.success("登录成功")
+            st.rerun()
+        else:
+            st.error("账号或密码错误")
+
+def logout_button():
+    if st.button("退出登录", use_container_width=True):
+        for k in ["logged_in", "auth_user", "auth_role", "auth_display_name"]:
+            if k in st.session_state:
+                del st.session_state[k]
+        st.rerun()
+        
 # --- 1. 基础配置 ---
 st.set_page_config(page_title="果熊俱乐部-KuDaKuMaClub V2", layout="wide")
 

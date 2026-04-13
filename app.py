@@ -122,6 +122,7 @@ QR_DIR = "qr_codes"
 EXPORT_DIR = "exports"
 ORDER_DETAIL_DIR = "order_details"
 LOG_FILE = "kudacuma_operation_log.csv"
+DRAFT_FILE = "kudacuma_draft_cache.json"
 
 # Google Sheets 配置
 SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"
@@ -169,6 +170,18 @@ if not os.path.exists(LOG_FILE):
     pd.DataFrame(columns=LOG_COLUMNS).to_csv(
         LOG_FILE, index=False, encoding="utf-8-sig"
     )
+
+if "quote_saved_once" not in st.session_state:
+    st.session_state["quote_saved_once"] = False
+
+if "current_quote_status" not in st.session_state:
+    st.session_state["current_quote_status"] = "草稿"
+
+if "last_saved_quote_id" not in st.session_state:
+    st.session_state["last_saved_quote_id"] = ""
+
+if "auto_draft_enabled" not in st.session_state:
+    st.session_state["auto_draft_enabled"] = True
 
 # =========================
 # 数据清洗 / 格式化工具函数
@@ -346,6 +359,99 @@ def load_order_detail(order_id: str):
     except Exception:
         return None
 
+def save_draft_cache(data: dict):
+    try:
+        with open(DRAFT_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def load_draft_cache():
+    if not os.path.exists(DRAFT_FILE):
+        return None
+    try:
+        with open(DRAFT_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def clear_draft_cache():
+    try:
+        if os.path.exists(DRAFT_FILE):
+            os.remove(DRAFT_FILE)
+    except Exception:
+        pass
+
+
+def build_draft_snapshot(
+    client,
+    rate,
+    valid_time,
+    quote_id,
+    service_pct,
+    pay_fee_pct,
+    freight_status,
+    freight_currency_mode,
+    pay_method,
+    w,
+    u_q,
+    u_c,
+    rmb_shipping_fee,
+    other_c,
+    manual_discount,
+    discount_note,
+    df_input
+):
+    return {
+        "client": client,
+        "rate": float(rate),
+        "valid_time": valid_time,
+        "quote_id": quote_id,
+        "service_pct": float(service_pct),
+        "pay_fee_pct": float(pay_fee_pct),
+        "freight_status": freight_status,
+        "freight_currency_mode": freight_currency_mode,
+        "pay_method": pay_method,
+        "weight": float(w),
+        "quote_freight_unit": int(u_q),
+        "cost_freight_unit": int(u_c),
+        "rmb_shipping_fee": float(rmb_shipping_fee),
+        "other_cost": int(other_c),
+        "manual_discount": int(manual_discount),
+        "discount_note": str(discount_note).strip(),
+        "items": df_input.to_dict(orient="records"),
+    }
+
+
+def load_draft_snapshot_as_editor(draft: dict):
+    if not draft:
+        return
+
+    st.session_state["quote_client_input"] = str(draft.get("client", "新客户")).strip() or "新客户"
+    st.session_state["quote_rate_input"] = float(draft.get("rate", 0.0450))
+    st.session_state["quote_valid_time_input"] = draft.get("valid_time", "48 Hours")
+    st.session_state["quote_id_input"] = str(draft.get("quote_id", "")).strip() or generate_new_quote_id()
+    st.session_state["quote_service_pct_input"] = float(draft.get("service_pct", 7.0))
+    st.session_state["quote_pay_fee_pct_input"] = float(draft.get("pay_fee_pct", 3.0))
+    st.session_state["quote_freight_status_input"] = draft.get("freight_status", "已确认")
+    st.session_state["quote_freight_currency_mode_input"] = draft.get("freight_currency_mode", "日元结算")
+    st.session_state["quote_pay_method_input"] = draft.get("pay_method", "微信支付")
+    st.session_state["quote_weight_input"] = float(draft.get("weight", 1.0))
+    st.session_state["quote_uq_input"] = int(draft.get("quote_freight_unit", 2200))
+    st.session_state["quote_uc_input"] = int(draft.get("cost_freight_unit", 1400))
+    st.session_state["quote_rmb_shipping_input"] = float(draft.get("rmb_shipping_fee", 0.0))
+    st.session_state["quote_other_c_input"] = int(draft.get("other_cost", 0))
+    st.session_state["quote_manual_discount_input"] = int(draft.get("manual_discount", 0))
+    st.session_state["quote_discount_note_input"] = draft.get("discount_note", "")
+
+    items = draft.get("items", [])
+    if not items:
+        items = default_item_rows()
+
+    st.session_state["items_editor_seed"] = items
+    st.session_state["items_editor_version"] = st.session_state.get("items_editor_version", 0) + 1
 
 def build_order_detail_payload(
     client,
@@ -438,6 +544,81 @@ def load_detail_as_new_draft(detail: dict, fallback_client: str = ""):
     st.session_state["items_editor_seed"] = items
     st.session_state["items_editor_version"] = st.session_state.get("items_editor_version", 0) + 1
 
+def auto_save_quote_record_if_needed(
+    client,
+    quote_id,
+    rate,
+    valid_time,
+    service_pct,
+    pay_fee_pct,
+    freight_status,
+    freight_currency_mode,
+    pay_method,
+    w,
+    u_q,
+    u_c,
+    rmb_shipping_fee,
+    other_c,
+    manual_discount,
+    discount_note,
+    valid_df,
+    grand_total_jpy,
+    net_profit_jpy,
+    history_status="报价"
+):
+    current_saved_id = st.session_state.get("last_saved_quote_id", "")
+    if st.session_state.get("quote_saved_once", False) and current_saved_id == quote_id:
+        return False
+
+    margin = (net_profit_jpy / grand_total_jpy * 100) if grand_total_jpy else 0
+
+    detail_payload = build_order_detail_payload(
+        client=client,
+        rate=rate,
+        valid_time=valid_time,
+        quote_id=quote_id,
+        service_pct=service_pct,
+        pay_fee_pct=pay_fee_pct,
+        freight_status=freight_status,
+        freight_currency_mode=freight_currency_mode,
+        pay_method=pay_method,
+        w=w,
+        u_q=u_q,
+        u_c=u_c,
+        rmb_shipping_fee=rmb_shipping_fee,
+        other_c=other_c,
+        manual_discount=manual_discount,
+        discount_note=discount_note,
+        valid_df=valid_df,
+        status=history_status,
+        grand_total_jpy=grand_total_jpy,
+        net_profit_jpy=net_profit_jpy,
+        margin=margin
+    )
+    save_order_detail(detail_payload)
+
+    new_row = pd.DataFrame([[
+        datetime.date.today(),
+        client,
+        quote_id,
+        history_status,
+        freight_status,
+        get_current_display_name(),
+        get_current_role(),
+        grand_total_jpy,
+        net_profit_jpy,
+        round(margin, 2)
+    ]], columns=BASE_COLUMNS)
+
+    history = load_history()
+    history = pd.concat([history, new_row], ignore_index=True)
+    save_history(history)
+
+    st.session_state["quote_saved_once"] = True
+    st.session_state["last_saved_quote_id"] = quote_id
+    st.session_state["current_quote_status"] = history_status
+
+    return True
 
 # --- Google Sheets 工具函数 ---
 @st.cache_resource
@@ -1572,6 +1753,12 @@ with st.sidebar:
 
 # --- 4. 新建报价 ---
 if menu == "新建报价":
+    if not st.session_state.get("draft_cache_loaded_once", False):
+        cached_draft = load_draft_cache()
+        if cached_draft:
+            load_draft_snapshot_as_editor(cached_draft)
+        st.session_state["draft_cache_loaded_once"] = True
+        
     valid_time_options = ["48 Hours", "24 Hours", "3 Days"]
     freight_options = ["已确认", "待确认"]
     freight_currency_mode_options = ["日元结算", "人民币结算"]
@@ -1613,6 +1800,42 @@ if menu == "新建报价":
         st.session_state["quote_freight_currency_mode_input"] = "日元结算"
     if st.session_state["quote_pay_method_input"] not in pay_method_options:
         st.session_state["quote_pay_method_input"] = "微信支付"
+        
+    st.info(f"当前状态：{st.session_state.get('current_quote_status', '草稿')}")
+    st.checkbox("开启自动暂存草稿", key="auto_draft_enabled")
+    col_new_1, col_new_2 = st.columns([1, 3])
+
+    with col_new_1:
+        if st.button("🆕 新建空白报价", use_container_width=True):
+            st.session_state["quote_client_input"] = "新客户"
+            st.session_state["quote_rate_input"] = 0.0450
+            st.session_state["quote_valid_time_input"] = "48 Hours"
+            st.session_state["quote_id_input"] = generate_new_quote_id()
+            st.session_state["quote_service_pct_input"] = 7.0
+            st.session_state["quote_pay_fee_pct_input"] = 3.0
+            st.session_state["quote_freight_status_input"] = "已确认"
+            st.session_state["quote_freight_currency_mode_input"] = "日元结算"
+            st.session_state["quote_pay_method_input"] = "微信支付"
+            st.session_state["quote_weight_input"] = 1.0
+            st.session_state["quote_uq_input"] = 2200
+            st.session_state["quote_uc_input"] = 1400
+            st.session_state["quote_rmb_shipping_input"] = 0.0
+            st.session_state["quote_other_c_input"] = 0
+            st.session_state["quote_manual_discount_input"] = 0
+            st.session_state["quote_discount_note_input"] = ""
+    
+            st.session_state["items_editor_seed"] = default_item_rows()
+            st.session_state["items_editor_version"] = st.session_state.get("items_editor_version", 0) + 1
+    
+            st.session_state["quote_saved_once"] = False
+            st.session_state["last_saved_quote_id"] = ""
+            st.session_state["current_quote_status"] = "草稿"
+    
+            clear_draft_cache()
+            st.session_state["draft_cache_loaded_once"] = True
+    
+            st.success("已创建全新报价")
+            st.rerun()
 
     with st.container(border=True):
         c1, c2, c3, c4 = st.columns(4)
@@ -1630,7 +1853,7 @@ if menu == "新建报价":
 
     st.markdown('<div class="control-title">📦 商品录入与成本控制</div>', unsafe_allow_html=True)
     f1, f2, f3, f4, f5 = st.columns(5)
-
+    
     if freight_status == "已确认":
         if st.session_state["quote_weight_input"] <= 0:
             st.session_state["quote_weight_input"] = 1.0
@@ -1703,6 +1926,31 @@ if menu == "新建报价":
         column_config=editor_columns
     )
 
+    if st.session_state.get("auto_draft_enabled", True):
+        draft_snapshot = build_draft_snapshot(
+            client=st.session_state.get("quote_client_input", "新客户"),
+            rate=st.session_state.get("quote_rate_input", 0.0450),
+            valid_time=st.session_state.get("quote_valid_time_input", "48 Hours"),
+            quote_id=st.session_state.get("quote_id_input", generate_new_quote_id()),
+            service_pct=st.session_state.get("quote_service_pct_input", 7.0),
+            pay_fee_pct=st.session_state.get("quote_pay_fee_pct_input", 3.0),
+            freight_status=st.session_state.get("quote_freight_status_input", "已确认"),
+            freight_currency_mode=st.session_state.get("quote_freight_currency_mode_input", "日元结算"),
+            pay_method=st.session_state.get("quote_pay_method_input", "微信支付"),
+            w=st.session_state.get("quote_weight_input", 1.0),
+            u_q=st.session_state.get("quote_uq_input", 2200),
+            u_c=st.session_state.get("quote_uc_input", 1400),
+            rmb_shipping_fee=st.session_state.get("quote_rmb_shipping_input", 0.0),
+            other_c=st.session_state.get("quote_other_c_input", 0),
+            manual_discount=st.session_state.get("quote_manual_discount_input", 0),
+            discount_note=st.session_state.get("quote_discount_note_input", ""),
+            df_input=df_input
+        )
+        st.session_state["draft_snapshot"] = draft_snapshot
+        save_draft_cache(draft_snapshot)
+    if not st.session_state.get("quote_saved_once", False):
+        st.session_state["current_quote_status"] = "草稿"
+    
     valid_df = df_input.copy()
     valid_df["商品"] = valid_df["商品"].fillna("").astype(str)
     valid_df = valid_df[valid_df["商品"].str.strip() != ""].copy()
@@ -2101,7 +2349,7 @@ if menu == "新建报价":
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:18px;'></div>", unsafe_allow_html=True)
-    s1, s2, s3 = st.columns(3)
+    s1, s2, s3, s4 = st.columns(4)
 
     with s1:
         if st.button("💾 保存为报价", use_container_width=True):
@@ -2154,6 +2402,10 @@ if menu == "新建报价":
                 history = pd.concat([history, new_row], ignore_index=True)
                 save_history(history)
                 write_operation_log("保存为报价", quote_id, client, "新建报价记录")
+                st.session_state["quote_saved_once"] = True
+                st.session_state["last_saved_quote_id"] = quote_id
+                st.session_state["current_quote_status"] = "报价"
+                clear_draft_cache()
                 st.success("已保存为报价")
 
     with s2:
@@ -2207,11 +2459,44 @@ if menu == "新建报价":
                 history = pd.concat([history, new_row], ignore_index=True)
                 save_history(history)
                 write_operation_log("保存为成交", quote_id, client, "新建成交记录")
+                st.session_state["quote_saved_once"] = True
+                st.session_state["last_saved_quote_id"] = quote_id
+                st.session_state["current_quote_status"] = "成交"
+                clear_draft_cache()
                 st.success("已保存为成交")
 
     with s3:
         if st.button("🖼️ 导出报价图片", use_container_width=True):
             try:
+                if valid_df.empty:
+                    st.error("无法导出：请先录入商品信息")
+                    st.stop()
+
+                auto_saved = auto_save_quote_record_if_needed(
+                    client=client,
+                    quote_id=quote_id,
+                    rate=rate,
+                    valid_time=valid_time,
+                    service_pct=service_pct,
+                    pay_fee_pct=pay_fee_pct,
+                    freight_status=freight_status,
+                    freight_currency_mode=freight_currency_mode,
+                    pay_method=pay_method,
+                    w=w,
+                    u_q=u_q,
+                    u_c=u_c,
+                    rmb_shipping_fee=rmb_shipping_fee,
+                    other_c=other_c,
+                    manual_discount=manual_discount,
+                    discount_note=discount_note,
+                    valid_df=valid_df,
+                    grand_total_jpy=grand_total_jpy,
+                    net_profit_jpy=net_profit_jpy,
+                    history_status="报价"
+                )
+
+                if auto_saved:
+                    write_operation_log("自动保存为报价", quote_id, client, "导出报价图片时自动保存")
                 qr_p = os.path.join(QR_DIR, f"{pay_method}.png")
                 export_path = export_quote_png(
                     client=client,
@@ -2240,6 +2525,7 @@ if menu == "新建报价":
                     qr_abs_path=qr_p
                 )
 
+                st.session_state["current_quote_status"] = "已导出"
                 st.success(f"报价图片已生成：{export_path}")
 
                 with open(export_path, "rb") as f:
@@ -2250,11 +2536,15 @@ if menu == "新建报价":
                         mime="image/png",
                         use_container_width=True
                     )
+                
             except FileNotFoundError:
                 st.error("当前运行环境未安装 Chrome / Chromium，暂时无法生成报价图片。请先在部署环境安装浏览器，或改用可复制文本报价。")
             except Exception as e:
                 st.error(f"导出报价图片失败：{e}")
 
+    with s4:
+        if st.button("🔄 刷新页面", use_container_width=True):
+            st.rerun()
 
 # --- 5. 历史订单 ---
 elif menu == "历史订单":
@@ -2310,6 +2600,9 @@ elif menu == "历史订单":
                     st.stop()
 
                 load_detail_as_new_draft(detail, fallback_client=row["客户"])
+                st.session_state["quote_saved_once"] = False
+                st.session_state["last_saved_quote_id"] = ""
+                st.session_state["current_quote_status"] = "草稿"
                 st.session_state["pending_menu_main"] = "新建报价"
                 write_operation_log("载入新草稿", order_id, row["客户"], "从历史订单载入")
                 st.success("已载入为新草稿，正在跳转到新建报价。")

@@ -876,20 +876,6 @@ def _build_item_cards_html(valid_df: pd.DataFrame) -> str:
 
     return f"<div class='{grid_class}'>" + "".join(cards) + "</div>"
 
-        if disc_pct < 100 and discounted_price != orig_price:
-            card_html += (
-                "<div class='item-sub-row'>"
-                "<span>折后金额</span>"
-                f"<span>¥ {discounted_price:,}</span>"
-                "</div>"
-            )
-
-        card_html += "</div>"
-        cards.append(card_html)
-
-    return f"<div class='{grid_class}'>" + "".join(cards) + "</div>"
-
-
 def build_quote_export_html(
     client,
     quote_id,
@@ -921,12 +907,6 @@ def build_quote_export_html(
     summary_html = (
         f"<div class='summary-row strong'><span>商品金额合计</span><span>¥ {p_rev:,}</span></div>"
     )
-
-    if discount_amount > 0:
-        summary_html += (
-            f"<div class='summary-row strong'><span>折后金额合计</span><span>¥ {p_rev:,}</span></div>"
-            f"<div class='summary-row discount'><span>优惠折扣总计</span><span>-¥ {discount_amount:,}</span></div>"
-        )
 
     grand_discount_html = ""
     if manual_discount > 0:

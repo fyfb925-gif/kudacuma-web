@@ -862,21 +862,19 @@ def _build_item_cards_html(valid_df: pd.DataFrame) -> str:
     for _, r in valid_df.iterrows():
         item_name = html.escape(str(r["商品"]))
         qty = int(r["数量"])
-        orig_price = int(r["项原价"])
-        discounted_price = int(r["项折后"])
-        disc_pct = float(r["折扣"])
-
-        disc_tag = ""
-        if disc_pct < 100:
-            disc_tag = f" <span style='font-size:16px; color:#E74C3C; font-weight:700;'>(折扣: {disc_pct:.1f}%)</span>"
+        final_price = int(r["项折后"])
 
         card_html = (
             "<div class='item-card'>"
             f"<div class='item-main-row'>"
-            f"<span>• {item_name} x{qty}{disc_tag}</span>"
-            f"<span>¥ {orig_price:,}</span>"
+            f"<span>• {item_name} x{qty}</span>"
+            f"<span>¥ {final_price:,}</span>"
+            "</div>"
             "</div>"
         )
+        cards.append(card_html)
+
+    return f"<div class='{grid_class}'>" + "".join(cards) + "</div>"
 
         if disc_pct < 100 and discounted_price != orig_price:
             card_html += (
@@ -921,7 +919,7 @@ def build_quote_export_html(
     items_html = _build_item_cards_html(valid_df)
 
     summary_html = (
-        f"<div class='summary-row subtle'><span>商品原价合计</span><span>¥ {p_rev_original:,}</span></div>"
+        f"<div class='summary-row strong'><span>商品金额合计</span><span>¥ {p_rev:,}</span></div>"
     )
 
     if discount_amount > 0:

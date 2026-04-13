@@ -409,8 +409,12 @@ def build_order_detail_payload(
     }
 
 
-def load_detail_as_new_draft(detail: dict):
-    st.session_state["quote_client_input"] = detail.get("client", "新客户")
+def load_detail_as_new_draft(detail: dict, fallback_client: str = ""):
+    client_name = str(detail.get("client", "")).strip()
+    if not client_name:
+        client_name = str(fallback_client).strip() or "新客户"
+
+    st.session_state["quote_client_input"] = client_name
     st.session_state["quote_rate_input"] = float(detail.get("rate", 0.0450))
     st.session_state["quote_valid_time_input"] = detail.get("valid_time", "48 Hours")
     st.session_state["quote_id_input"] = generate_new_quote_id()
@@ -430,6 +434,7 @@ def load_detail_as_new_draft(detail: dict):
     items = detail.get("items", [])
     if not items:
         items = default_item_rows()
+
     st.session_state["items_editor_seed"] = items
     st.session_state["items_editor_version"] = st.session_state.get("items_editor_version", 0) + 1
 
@@ -1548,12 +1553,16 @@ with st.sidebar:
     else:
         menu_options = ["新建报价", "历史订单"]
 
+    if "pending_menu_main" in st.session_state:
+        st.session_state["menu_main"] = st.session_state["pending_menu_main"]
+        del st.session_state["pending_menu_main"]
+    
     if "menu_main" not in st.session_state:
         st.session_state["menu_main"] = menu_options[0]
-
+    
     if st.session_state["menu_main"] not in menu_options:
         st.session_state["menu_main"] = menu_options[0]
-
+    
     menu = st.radio("导航", menu_options, key="menu_main")
 
     if ENABLE_LOGIN:
@@ -2300,8 +2309,8 @@ elif menu == "历史订单":
                     st.error("❌ 无权限载入这条订单明细")
                     st.stop()
 
-                load_detail_as_new_draft(detail)
-                st.session_state["menu_main"] = "新建报价"
+                load_detail_as_new_draft(detail, fallback_client=row["客户"])
+                st.session_state["pending_menu_main"] = "新建报价"
                 write_operation_log("载入新草稿", order_id, row["客户"], "从历史订单载入")
                 st.success("已载入为新草稿，正在跳转到新建报价。")
                 st.rerun()

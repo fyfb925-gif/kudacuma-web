@@ -105,10 +105,20 @@ if ENABLE_LOGIN and not is_logged_in():
     st.stop()
 
 if not ENABLE_LOGIN:
-    st.session_state["logged_in"] = True
-    st.session_state["auth_user"] = "admin"
-    st.session_state["auth_role"] = "admin"
-    st.session_state["auth_display_name"] = USERS["admin"].get("display_name", "admin")
+    if "device_user" not in st.session_state:
+        st.session_state["device_user"] = "boss_a"
+
+    if st.session_state["device_user"] == "boss_a":
+        st.session_state["logged_in"] = True
+        st.session_state["auth_user"] = "boss_a"
+        st.session_state["auth_role"] = "admin"
+        st.session_state["auth_display_name"] = "🐻姐"
+    else:
+        st.session_state["logged_in"] = True
+        st.session_state["auth_user"] = "boss_b"
+        st.session_state["auth_role"] = "admin"
+        st.session_state["auth_display_name"] = "🐻哥"
+
     st.session_state["login_version"] = LOGIN_VERSION
 
 # 登录版本校验（强制全员下线机制）
@@ -123,6 +133,8 @@ EXPORT_DIR = "exports"
 ORDER_DETAIL_DIR = "order_details"
 LOG_FILE = "kudacuma_operation_log.csv"
 DRAFT_FILE = "kudacuma_draft_cache.json"
+LOCK_FILE = "kudacuma_quote_lock.json"
+LOCK_TIMEOUT_MINUTES = 10
 
 # Google Sheets 配置
 SHEET_ID = "1YiCSICtstqZRjkdpRpQsgS3jLC-t1BFIY6kQuxRfHho"
@@ -383,6 +395,114 @@ def clear_draft_cache():
             os.remove(DRAFT_FILE)
     except Exception:
         pass
+
+def load_lock_data():
+    if not os.path.exists(LOCK_FILE):
+        return {
+            "new_quote_lock": {
+                "locked": False,
+                "locked_by": "",
+                "locked_name": "",
+                "locked_at": ""
+            }
+        }
+    try:
+        with open(LOCK_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if "new_quote_lock" not in data:
+            data["new_quote_lock"] = {
+                "locked": False,
+                "locked_by": "",
+                "locked_name": "",
+                "locked_at": ""
+            }
+        return data
+    except Exception:
+        return {
+            "new_quote_lock": {
+                "locked": False,
+                "locked_by": "",
+                "locked_name": "",
+                "locked_at": ""
+            }
+        }
+
+
+def save_lock_data(data):
+    with open(LOCK_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def now_str():
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def parse_lock_time(time_str):
+    try:
+        return datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return None
+
+
+def get_new_quote_lock_info():
+    data = load_lock_data()
+    return data.get("new_quote_lock", {})
+
+
+def ensure_new_quote_lock_notice():
+    current_user = get_current_user()
+    current_name = get_current_display_name()
+
+    data = load_lock_data()
+    lock_info = data.get("new_quote_lock", {})
+
+    locked = bool(lock_info.get("locked", False))
+    locked_by = str(lock_info.get("locked_by", "")).strip()
+    locked_name = str(lock_info.get("locked_name", "")).strip()
+    locked_at = str(lock_info.get("locked_at", "")).strip()
+
+    if not locked:
+        data["new_quote_lock"] = {
+            "locked": True,
+            "locked_by": current_user,
+            "locked_name": current_name,
+            "locked_at": now_str()
+        }
+        save_lock_data(data)
+        return "self", current_name, data["new_quote_lock"]["locked_at"]
+
+    if locked_by == current_user:
+        return "self", locked_name or current_name, locked_at
+
+    lock_time = parse_lock_time(locked_at)
+    if lock_time and (datetime.datetime.now() - lock_time > datetime.timedelta(minutes=LOCK_TIMEOUT_MINUTES)):
+        data["new_quote_lock"] = {
+            "locked": True,
+            "locked_by": current_user,
+            "locked_name": current_name,
+            "locked_at": now_str()
+        }
+        save_lock_data(data)
+        return "self", current_name, data["new_quote_lock"]["locked_at"]
+
+    return "other", locked_name or "未知用户", locked_at
+
+
+def release_new_quote_lock():
+    current_user = get_current_user()
+    data = load_lock_data()
+    lock_info = data.get("new_quote_lock", {})
+
+    if str(lock_info.get("locked_by", "")).strip() == current_user:
+        data["new_quote_lock"] = {
+            "locked": False,
+            "locked_by": "",
+            "locked_name": "",
+            "locked_at": ""
+        }
+        save_lock_data(data)
+        return True
+    return False
 
 
 def build_draft_snapshot(
@@ -1699,6 +1819,18 @@ div[data-testid="stDataEditor"] textarea {
 with st.sidebar:
     st.title("🐻 KDKM V2")
 
+    if not ENABLE_LOGIN:
+        current_device_user = st.radio(
+            "本机当前使用人",
+            options=["boss_a", "boss_b"],
+            format_func=lambda x: "🐻姐" if x == "boss_a" else "🐻哥",
+            key="device_user"
+        )
+
+        st.session_state["auth_user"] = current_device_user
+        st.session_state["auth_role"] = "admin"
+        st.session_state["auth_display_name"] = "🐻姐" if current_device_user == "boss_a" else "🐻哥"
+
     st.caption(f"当前用户：{st.session_state.get('auth_display_name', '')}")
     role_map = {
         "admin": "老板",
@@ -1731,6 +1863,20 @@ with st.sidebar:
 
 # --- 4. 新建报价 ---
 if menu == "新建报价":
+    lock_status, lock_name, lock_time = ensure_new_quote_lock_notice()
+
+    lock_minutes_text = ""
+    parsed_lock_time = parse_lock_time(lock_time)
+    if parsed_lock_time:
+        elapsed_minutes = int((datetime.datetime.now() - parsed_lock_time).total_seconds() // 60)
+        lock_minutes_text = f"｜已持续 {elapsed_minutes} 分钟"
+
+    if lock_status == "self":
+        st.success(f"🟢 当前由你编辑中（开始时间：{lock_time}{lock_minutes_text}）")
+    else:
+        st.warning(f"🟡 {lock_name} 正在编辑该报价（开始时间：{lock_time}{lock_minutes_text}）")
+        st.caption("👉 建议避免同时修改，以免草稿和报价数据互相覆盖")
+        
     if not st.session_state.get("draft_cache_loaded_once", False):
         cached_draft = load_draft_cache()
         if cached_draft:
@@ -2384,7 +2530,9 @@ if menu == "新建报价":
                 st.session_state["last_saved_quote_id"] = quote_id
                 st.session_state["current_quote_status"] = "报价"
                 clear_draft_cache()
-                st.success("已保存为报价")
+                release_new_quote_lock()
+                st.success("已保存为报价，并自动释放占用")
+                st.rerun()
 
     with s2:
         if st.button("✅ 保存为成交", use_container_width=True):
@@ -2441,7 +2589,9 @@ if menu == "新建报价":
                 st.session_state["last_saved_quote_id"] = quote_id
                 st.session_state["current_quote_status"] = "成交"
                 clear_draft_cache()
-                st.success("已保存为成交")
+                release_new_quote_lock()
+                st.success("已保存为成交，并自动释放占用")
+                st.rerun()
 
     with s3:
         if st.button("🖼️ 导出报价图片", use_container_width=True):
@@ -2475,6 +2625,7 @@ if menu == "新建报价":
 
                 if auto_saved:
                     write_operation_log("自动保存为报价", quote_id, client, "导出报价图片时自动保存")
+
                 qr_p = os.path.join(QR_DIR, f"{pay_method}.png")
                 export_path = export_quote_png(
                     client=client,
@@ -2504,7 +2655,8 @@ if menu == "新建报价":
                 )
 
                 st.session_state["current_quote_status"] = "已导出"
-                st.success(f"报价图片已生成：{export_path}")
+                release_new_quote_lock()
+                st.success(f"报价图片已生成：{export_path}，并自动释放占用")
 
                 with open(export_path, "rb") as f:
                     st.download_button(
@@ -2514,7 +2666,7 @@ if menu == "新建报价":
                         mime="image/png",
                         use_container_width=True
                     )
-                
+
             except FileNotFoundError:
                 st.error("当前运行环境未安装 Chrome / Chromium，暂时无法生成报价图片。请先在部署环境安装浏览器，或改用可复制文本报价。")
             except Exception as e:
